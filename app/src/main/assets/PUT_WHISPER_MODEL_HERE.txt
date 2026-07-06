@@ -1,0 +1,14 @@
+هذا المجلد يجب أن يحتوي على ملفين حتى تعمل ميزة الترجمة التلقائية (Whisper):
+
+1) whisper_tiny.tflite
+   - نموذج Whisper المحوّل إلى TensorFlow Lite (نسخة tiny أو base خفيفة).
+   - يمكن تحميله من مستودعات مثل usefulsensors/openai-whisper على GitHub
+     (قسم Releases فيه ملفات .tflite جاهزة).
+
+2) whisper_vocab.json
+   - ملف يربط رقم كل Token بالنص المقابل له (Tokenizer Vocabulary).
+   - يُستخرج عادة مع نفس النموذج أو من مستودع openai/whisper الأصلي.
+
+ضع الملفين هنا بنفس الاسمين تماماً، ثم أعد بناء المشروع.
+لاحظ: قد تحتاج لتعديل بسيط في WhisperInterpreterHelper.kt حسب الشكل
+الدقيق لمدخلات/مخرجات النموذج الذي تختاره، لأنها تختلف قليلاً بين التحويلات المختلفة.

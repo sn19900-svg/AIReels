@@ -5,9 +5,9 @@ import androidx.lifecycle.viewModelScope
 import com.nabil.aireels.data.state.ProjectStateHolder
 import com.nabil.aireels.domain.model.Clip
 import dagger.hilt.android.lifecycle.HiltViewModel
-import kotlinx.coroutines.SharingStarted
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import java.util.UUID

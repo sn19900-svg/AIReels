@@ -5,6 +5,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.nabil.aireels.feature.autoreel.AutoReelScreen
 import com.nabil.aireels.feature.camera.CameraScreen
 import com.nabil.aireels.feature.captions.CaptionsScreen
 import com.nabil.aireels.feature.editor.EditorScreen
@@ -19,7 +20,8 @@ fun AiReelsNavGraph(navController: NavHostController = rememberNavController()) 
             HomeScreen(
                 onNavigateToCamera = { navController.navigate(Screen.Camera.route) },
                 onNavigateToScriptGen = { navController.navigate(Screen.ScriptGen.route) },
-                onNavigateToEditor = { navController.navigate(Screen.Editor.route) }
+                onNavigateToEditor = { navController.navigate(Screen.Editor.route) },
+                onNavigateToAutoReel = { navController.navigate(Screen.AutoReel.route) }
             )
         }
         composable(Screen.Camera.route) {
@@ -39,6 +41,9 @@ fun AiReelsNavGraph(navController: NavHostController = rememberNavController()) 
         }
         composable(Screen.Export.route) {
             ExportScreen(onBack = { navController.popBackStack(Screen.Home.route, false) })
+        }
+        composable(Screen.AutoReel.route) {
+            AutoReelScreen(onBack = { navController.popBackStack() })
         }
     }
 }

@@ -7,4 +7,5 @@ sealed class Screen(val route: String) {
     data object Editor : Screen("editor")
     data object Captions : Screen("captions")
     data object Export : Screen("export")
+    data object AutoReel : Screen("auto_reel")
 }

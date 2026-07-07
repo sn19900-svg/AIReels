@@ -18,7 +18,8 @@ import androidx.compose.ui.unit.dp
 fun HomeScreen(
     onNavigateToCamera: () -> Unit,
     onNavigateToScriptGen: () -> Unit,
-    onNavigateToEditor: () -> Unit
+    onNavigateToEditor: () -> Unit,
+    onNavigateToAutoReel: () -> Unit
 ) {
     Column(
         modifier = Modifier
@@ -39,6 +40,10 @@ fun HomeScreen(
         Spacer(modifier = Modifier.height(12.dp))
         Button(onClick = onNavigateToEditor, modifier = Modifier.fillMaxWidth()) {
             Text(text = "الانتقال إلى المحرر")
+        }
+        Spacer(modifier = Modifier.height(12.dp))
+        Button(onClick = onNavigateToAutoReel, modifier = Modifier.fillMaxWidth()) {
+            Text(text = "إنشاء ريلز تلقائي من صور")
         }
     }
 }

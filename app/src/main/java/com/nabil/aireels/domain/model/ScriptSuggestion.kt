@@ -4,5 +4,6 @@ data class ScriptSuggestion(
     val hook: String,
     val fullScript: String,
     val captions: List<String>,
+    val captionCues: List<CaptionCue> = emptyList(),
     val hashtags: List<String>
 )

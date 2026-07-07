@@ -22,7 +22,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         val startSeconds = startMs / 1000.0
         val durationSeconds = (endMs - startMs) / 1000.0
         val command = "-y -i \"$inputPath\" -ss $startSeconds -t $durationSeconds " +
-            "-c:v mpeg4 -c:a aac \"$outputPath\""
+            "-c:v mpeg4 -q:v 3 -c:a aac \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -51,7 +51,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         }
 
         val command = "-y -f concat -safe 0 -i \"${listFile.absolutePath}\" " +
-            "-c:v mpeg4 -c:a aac \"$outputPath\""
+            "-c:v mpeg4 -q:v 3 -c:a aac \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         listFile.delete()
@@ -112,7 +112,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
             "format=yuv420p"
 
         val command = "-y -loop 1 -i \"$imagePath\" -t $durationSeconds " +
-            "-vf \"$vf\" -c:v libx264 -preset veryfast -crf 20 -an \"$outputPath\""
+            "-vf \"$vf\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -133,7 +133,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
 
         if (segments.size == 1) {
             val singleCommand = "-y -i \"${segments[0].first}\" " +
-                "-c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -an \"$outputPath\""
+                "-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -an \"$outputPath\""
             val session = FFmpegKit.execute(singleCommand)
             return@withContext if (ReturnCode.isSuccess(session.returnCode)) {
                 AppResult.Success(outputPath)
@@ -163,7 +163,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
 
         val filterComplex = filterBuilder.toString().trimEnd(';')
         val command = "$inputsBuilder-filter_complex \"$filterComplex\" -map \"[$lastLabel]\" " +
-            "-c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p \"$outputPath\""
+            "-c:v mpeg4 -q:v 3 -pix_fmt yuv420p \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -180,7 +180,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
     ): AppResult<String> = withContext(Dispatchers.IO) {
         if (captionOverlays.isEmpty()) {
             val copySession = FFmpegKit.execute(
-                "-y -i \"$videoPath\" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p " +
+                "-y -i \"$videoPath\" -c:v mpeg4 -q:v 3 -pix_fmt yuv420p " +
                     "-c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
             )
             return@withContext if (ReturnCode.isSuccess(copySession.returnCode)) {
@@ -208,7 +208,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
 
         val filterComplex = filterBuilder.toString().trimEnd(';')
         val command = "$inputsBuilder-filter_complex \"$filterComplex\" -map \"[$lastLabel]\" -map 0:a? " +
-            "-c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
+            "-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {

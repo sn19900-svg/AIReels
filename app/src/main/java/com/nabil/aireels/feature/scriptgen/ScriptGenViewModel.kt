@@ -3,6 +3,7 @@ package com.nabil.aireels.feature.scriptgen
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nabil.aireels.core.util.AppResult
+import com.nabil.aireels.data.state.ProjectStateHolder
 import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.usecase.GenerateReelScriptUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -22,7 +23,8 @@ data class ScriptGenUiState(
 
 @HiltViewModel
 class ScriptGenViewModel @Inject constructor(
-    private val generateReelScriptUseCase: GenerateReelScriptUseCase
+    private val generateReelScriptUseCase: GenerateReelScriptUseCase,
+    private val projectStateHolder: ProjectStateHolder
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(ScriptGenUiState())
@@ -55,5 +57,12 @@ class ScriptGenViewModel @Inject constructor(
                 }
             }
         }
+    }
+
+    fun sendToAutoReel() {
+        projectStateHolder.setPendingAutoReelInput(
+            topic = _uiState.value.topic,
+            tone = _uiState.value.tone
+        )
     }
 }

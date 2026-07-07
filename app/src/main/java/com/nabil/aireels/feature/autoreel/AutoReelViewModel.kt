@@ -39,6 +39,12 @@ class AutoReelViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(AutoReelUiState())
     val uiState: StateFlow<AutoReelUiState> = _uiState
 
+    init {
+        projectStateHolder.consumePendingAutoReelInput()?.let { (topic, tone) ->
+            _uiState.value = _uiState.value.copy(topic = topic, tone = tone)
+        }
+    }
+
     fun onTopicChanged(value: String) {
         _uiState.value = _uiState.value.copy(topic = value)
     }

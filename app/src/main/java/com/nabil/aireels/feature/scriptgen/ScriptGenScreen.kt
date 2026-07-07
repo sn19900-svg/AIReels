@@ -1,6 +1,7 @@
 package com.nabil.aireels.feature.scriptgen
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -16,15 +17,19 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 
 @Composable
 fun ScriptGenScreen(
     onBack: () -> Unit,
+    onNavigateToAutoReel: () -> Unit,
     viewModel: ScriptGenViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val clipboardManager = LocalClipboardManager.current
 
     Column(
         modifier = Modifier
@@ -77,6 +82,36 @@ fun ScriptGenScreen(
             Spacer(modifier = Modifier.height(12.dp))
             Text(text = "الوسوم:")
             Text(text = suggestion.hashtags.joinToString(" "))
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Row(modifier = Modifier.fillMaxWidth()) {
+                Button(
+                    onClick = {
+                        val fullTextToCopy = buildString {
+                            append(suggestion.hook)
+                            append("\n\n")
+                            append(suggestion.fullScript)
+                            append("\n\n")
+                            append(suggestion.hashtags.joinToString(" "))
+                        }
+                        clipboardManager.setText(AnnotatedString(fullTextToCopy))
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(text = "نسخ النص")
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    viewModel.sendToAutoReel()
+                    onNavigateToAutoReel()
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "استخدام هذا الموضوع في الريلز التلقائي مع صوري")
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

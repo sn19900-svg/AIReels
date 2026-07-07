@@ -28,7 +28,10 @@ fun AiReelsNavGraph(navController: NavHostController = rememberNavController()) 
             CameraScreen(onClipsReady = { navController.navigate(Screen.Editor.route) })
         }
         composable(Screen.ScriptGen.route) {
-            ScriptGenScreen(onBack = { navController.popBackStack() })
+            ScriptGenScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToAutoReel = { navController.navigate(Screen.AutoReel.route) }
+            )
         }
         composable(Screen.Editor.route) {
             EditorScreen(

@@ -28,6 +28,11 @@ android {
             ?: System.getenv("GEMINI_API_KEY")
             ?: ""
         buildConfigField("String", "GEMINI_API_KEY", "\"$geminiApiKey\"")
+
+        val pexelsApiKey = localProps.getProperty("pexels.api.key")
+            ?: System.getenv("PEXELS_API_KEY")
+            ?: ""
+        buildConfigField("String", "PEXELS_API_KEY", "\"$pexelsApiKey\"")
     }
 
     buildTypes {

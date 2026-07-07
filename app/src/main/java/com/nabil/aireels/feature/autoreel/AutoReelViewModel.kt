@@ -21,6 +21,7 @@ data class AutoReelUiState(
     val tone: String = "حماسي",
     val durationSeconds: Int = 20,
     val selectedImagePaths: List<String> = emptyList(),
+    val useAiPhotos: Boolean = false,
     val captionsEnabled: Boolean = true,
     val audioEnabled: Boolean = false,
     val selectedAudioPath: String? = null,
@@ -55,6 +56,10 @@ class AutoReelViewModel @Inject constructor(
 
     fun onCaptionsEnabledChanged(enabled: Boolean) {
         _uiState.value = _uiState.value.copy(captionsEnabled = enabled)
+    }
+
+    fun onUseAiPhotosChanged(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(useAiPhotos = enabled)
     }
 
     fun onAudioEnabledChanged(enabled: Boolean) {
@@ -112,6 +117,7 @@ class AutoReelViewModel @Inject constructor(
                 tone = _uiState.value.tone,
                 durationSeconds = _uiState.value.durationSeconds,
                 imagePaths = _uiState.value.selectedImagePaths,
+                useAiPhotos = _uiState.value.useAiPhotos,
                 captionsEnabled = _uiState.value.captionsEnabled,
                 audioPath = audioPathToUse,
                 workingDir = workingDir,

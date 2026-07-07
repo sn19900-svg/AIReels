@@ -79,15 +79,31 @@ fun AutoReelScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
-        Button(
-            onClick = {
-                imagePickerLauncher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                )
-            },
-            modifier = Modifier.fillMaxWidth()
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "اختيار الصور (${uiState.selectedImagePaths.size} محددة)")
+            Text(text = "دع الذكاء الاصطناعي يختار الصور تلقائياً (صور واقعية مجانية)")
+            Switch(
+                checked = uiState.useAiPhotos,
+                onCheckedChange = viewModel::onUseAiPhotosChanged
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        if (!uiState.useAiPhotos) {
+            Button(
+                onClick = {
+                    imagePickerLauncher.launch(
+                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                    )
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(text = "اختيار الصور (${uiState.selectedImagePaths.size} محددة)")
+            }
         }
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -141,7 +157,7 @@ fun AutoReelScreen(
                 val workingDir = File(context.getExternalFilesDir(null), "autoreel").apply { mkdirs() }
                 viewModel.generateAutoReel(workingDir)
             },
-            enabled = uiState.selectedImagePaths.isNotEmpty() &&
+            enabled = (uiState.useAiPhotos || uiState.selectedImagePaths.isNotEmpty()) &&
                 uiState.topic.isNotBlank() &&
                 !uiState.isProcessing &&
                 (!uiState.audioEnabled || uiState.selectedAudioPath != null),

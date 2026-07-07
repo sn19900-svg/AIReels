@@ -16,6 +16,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import retrofit2.HttpException
 import javax.inject.Inject
+import kotlin.math.ceil
 
 class GeminiRepositoryImpl @Inject constructor(
     private val geminiApiService: GeminiApiService
@@ -34,7 +35,8 @@ class GeminiRepositoryImpl @Inject constructor(
                 )
             }
 
-            val prompt = buildPrompt(topic, tone, durationSeconds)
+            val imageCount = ceil(durationSeconds / 5.0).toInt().coerceIn(1, 8)
+            val prompt = buildPrompt(topic, tone, durationSeconds, imageCount)
             val request = GeminiRequest(
                 contents = listOf(GeminiContent(parts = listOf(GeminiPart(text = prompt))))
             )
@@ -81,6 +83,14 @@ class GeminiRepositoryImpl @Inject constructor(
                 }
             }
 
+            val imageQueriesArray = json.optJSONArray("image_queries")
+            val imageQueries = mutableListOf<String>()
+            if (imageQueriesArray != null) {
+                for (i in 0 until imageQueriesArray.length()) {
+                    imageQueries.add(imageQueriesArray.getString(i))
+                }
+            }
+
             val hashtagsArray = json.optJSONArray("hashtags")
             val hashtags = mutableListOf<String>()
             if (hashtagsArray != null) {
@@ -94,6 +104,7 @@ class GeminiRepositoryImpl @Inject constructor(
                 fullScript = json.optString("full_script", ""),
                 captions = captions,
                 captionCues = captionCues,
+                imageQueries = imageQueries,
                 hashtags = hashtags
             )
 
@@ -129,15 +140,16 @@ class GeminiRepositoryImpl @Inject constructor(
         throw lastException ?: IllegalStateException("فشلت جميع المحاولات")
     }
 
-    private fun buildPrompt(topic: String, tone: String, durationSeconds: Int): String {
+    private fun buildPrompt(topic: String, tone: String, durationSeconds: Int, imageCount: Int): String {
         return """
-            أنت كاتب محتوى محترف لمنصات الفيديو القصيرة (ريلز/شورتس).
+            أنت كاتب محتوى محترف لمنصات الفيديو القصيرة (ريلز/شورتس) ومخرج فني.
             الموضوع: $topic
             الأسلوب المطلوب: $tone
             مدة الفيديو المستهدفة بالثواني بالضبط: $durationSeconds
 
             أعطني الناتج بصيغة JSON فقط وبدون أي نص إضافي قبله أو بعده، بالمخطط التالي بالضبط.
-            مهم جداً: مجموع أزمنة caption_cues يجب أن يغطي المدة كاملة من 0 إلى $durationSeconds بدون فجوات أو تداخل، وكل جملة يجب أن تكون قصيرة (4-8 كلمات) لتناسب الشاشة:
+            مهم جداً: مجموع أزمنة caption_cues يجب أن يغطي المدة كاملة من 0 إلى $durationSeconds بدون فجوات أو تداخل، وكل جملة قصيرة (4-8 كلمات).
+            مهم جداً أيضاً: قدّم بالضبط $imageCount من image_queries، وهي كلمات بحث بصرية بسيطة بالإنجليزية (2-4 كلمات لكل عبارة) تصف مشاهد واقعية حقيقية تناسب الموضوع، مناسبة للبحث في مكتبة صور فوتوغرافية احترافية (مثال: "misty pine forest morning"، "steaming coffee cup wood table"). لا تستخدم أسماء أشخاص مشهورين أو علامات تجارية:
             {
               "hook": "جملة افتتاحية قوية لجذب المشاهد في أول 3 ثواني",
               "full_script": "النص الكامل للفيديو مقسم بفقرات قصيرة",
@@ -146,6 +158,7 @@ class GeminiRepositoryImpl @Inject constructor(
                 {"text": "سطر الترجمة الأول", "start": 0, "end": 3.5},
                 {"text": "سطر الترجمة الثاني", "start": 3.5, "end": 7}
               ],
+              "image_queries": ["query 1", "query 2"],
               "hashtags": ["#وسم1", "#وسم2", "#وسم3"]
             }
         """.trimIndent()

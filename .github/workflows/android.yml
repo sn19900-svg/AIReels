@@ -25,6 +25,7 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: |
           echo "gemini.api.key=${GEMINI_API_KEY}" >> local.properties
+          echo "pexels.api.key=${{ secrets.PEXELS_API_KEY }}" >> local.properties
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v4

@@ -5,5 +5,6 @@ data class ScriptSuggestion(
     val fullScript: String,
     val captions: List<String>,
     val captionCues: List<CaptionCue> = emptyList(),
+    val imageQueries: List<String> = emptyList(),
     val hashtags: List<String>
 )

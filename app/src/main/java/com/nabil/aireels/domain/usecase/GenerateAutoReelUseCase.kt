@@ -2,6 +2,7 @@ package com.nabil.aireels.domain.usecase
 
 import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.render.CaptionRenderer
+import com.nabil.aireels.data.repository.PexelsRepository
 import com.nabil.aireels.domain.model.CaptionOverlay
 import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.repository.GeminiRepository
@@ -18,7 +19,8 @@ data class AutoReelResult(
 class GenerateAutoReelUseCase @Inject constructor(
     private val geminiRepository: GeminiRepository,
     private val videoRepository: VideoRepository,
-    private val captionRenderer: CaptionRenderer
+    private val captionRenderer: CaptionRenderer,
+    private val pexelsRepository: PexelsRepository
 ) {
     private val videoWidth = 1080
     private val videoHeight = 1920
@@ -28,13 +30,14 @@ class GenerateAutoReelUseCase @Inject constructor(
         tone: String,
         durationSeconds: Int,
         imagePaths: List<String>,
+        useAiPhotos: Boolean,
         captionsEnabled: Boolean,
         audioPath: String?,
         workingDir: File,
         onProgress: (String) -> Unit
     ): AppResult<AutoReelResult> {
-        if (imagePaths.isEmpty()) {
-            return AppResult.Error("الرجاء إرفاق صورة واحدة على الأقل")
+        if (!useAiPhotos && imagePaths.isEmpty()) {
+            return AppResult.Error("الرجاء إرفاق صورة واحدة على الأقل، أو تفعيل اختيار الصور تلقائياً")
         }
 
         onProgress("جاري توليد النص بالذكاء الاصطناعي...")
@@ -45,11 +48,33 @@ class GenerateAutoReelUseCase @Inject constructor(
             AppResult.Loading -> return AppResult.Error("حالة غير متوقعة")
         }
 
+        var finalImagePaths = imagePaths
+
+        if (useAiPhotos) {
+            if (script.imageQueries.isEmpty()) {
+                return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للصور، حاول مرة أخرى")
+            }
+            onProgress("جاري جلب صور مناسبة تلقائياً...")
+            val downloadedPaths = mutableListOf<String>()
+            script.imageQueries.forEachIndexed { index, query ->
+                val destFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
+                when (val result = pexelsRepository.searchAndDownloadPhoto(query, destFile)) {
+                    is AppResult.Success -> downloadedPaths.add(result.data)
+                    is AppResult.Error -> return AppResult.Error(result.message)
+                }
+            }
+            finalImagePaths = downloadedPaths
+        }
+
+        if (finalImagePaths.isEmpty()) {
+            return AppResult.Error("لم يتم توفير أي صور صالحة لإنشاء الريلز")
+        }
+
         onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
-        val perImageDuration = durationSeconds.toDouble() / imagePaths.size
+        val perImageDuration = durationSeconds.toDouble() / finalImagePaths.size
         val segmentPaths = mutableListOf<Pair<String, Double>>()
 
-        imagePaths.forEachIndexed { index, imagePath ->
+        finalImagePaths.forEachIndexed { index, imagePath ->
             val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
             when (val result = videoRepository.createKenBurnsSegment(
                 imagePath = imagePath,

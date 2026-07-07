@@ -104,15 +104,18 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         val totalFrames = (durationSeconds * fps).toInt().coerceAtLeast(fps)
         val bigWidth = width * 2
         val bigHeight = height * 2
-        val targetRatio = width.toDouble() / height.toDouble()
 
-        val vf = "scale=w='if(gte(iw/ih,$targetRatio),-2,$bigWidth)':h='if(gte(iw/ih,$targetRatio),$bigHeight,-2)'," +
-            "crop=$bigWidth:$bigHeight," +
-            "zoompan=z='min(zoom+0.0012,1.25)':d=$totalFrames:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=$fps," +
-            "format=yuv420p"
+        val filterComplex =
+            "[0:v]scale=$bigWidth:$bigHeight:force_original_aspect_ratio=increase," +
+                "crop=$bigWidth:$bigHeight,gblur=sigma=30,eq=brightness=-0.08[bg];" +
+                "[1:v]scale=$bigWidth:$bigHeight:force_original_aspect_ratio=decrease[fg];" +
+                "[bg][fg]overlay=(W-w)/2:(H-h)/2," +
+                "zoompan=z='min(zoom+0.0006,1.12)':d=$totalFrames:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=$fps," +
+                "format=yuv420p[vout]"
 
-        val command = "-y -loop 1 -i \"$imagePath\" -t $durationSeconds " +
-            "-vf \"$vf\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
+        val command = "-y -loop 1 -t $durationSeconds -i \"$imagePath\" " +
+            "-loop 1 -t $durationSeconds -i \"$imagePath\" " +
+            "-filter_complex \"$filterComplex\" -map \"[vout]\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {

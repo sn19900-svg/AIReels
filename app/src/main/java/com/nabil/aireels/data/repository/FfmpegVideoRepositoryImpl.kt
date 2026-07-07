@@ -69,7 +69,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         outputPath: String
     ): AppResult<String> = withContext(Dispatchers.IO) {
         val command = "-y -i \"$videoPath\" -i \"$audioPath\" " +
-            "-c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest \"$outputPath\""
+            "-c:v copy -c:a aac -b:a 128k -map 0:v:0 -map 1:a:0 -shortest -movflags +faststart \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -102,9 +102,17 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
     ): AppResult<String> = withContext(Dispatchers.IO) {
         val fps = 30
         val totalFrames = (durationSeconds * fps).toInt().coerceAtLeast(fps)
+        val bigWidth = width * 2
+        val bigHeight = height * 2
+        val targetRatio = width.toDouble() / height.toDouble()
+
+        val vf = "scale=w='if(gte(iw/ih,$targetRatio),-2,$bigWidth)':h='if(gte(iw/ih,$targetRatio),$bigHeight,-2)'," +
+            "crop=$bigWidth:$bigHeight," +
+            "zoompan=z='min(zoom+0.0012,1.25)':d=$totalFrames:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=$fps," +
+            "format=yuv420p"
+
         val command = "-y -loop 1 -i \"$imagePath\" -t $durationSeconds " +
-            "-vf \"scale=${width * 2}:-1,zoompan=z='zoom+0.0015':d=$totalFrames:s=${width}x${height}:fps=$fps,format=yuv420p\" " +
-            "-c:v mpeg4 -an \"$outputPath\""
+            "-vf \"$vf\" -c:v libx264 -preset veryfast -crf 20 -an \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -114,17 +122,71 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         }
     }
 
+    override suspend fun concatWithCrossfade(
+        segments: List<Pair<String, Double>>,
+        transitionSeconds: Double,
+        outputPath: String
+    ): AppResult<String> = withContext(Dispatchers.IO) {
+        if (segments.isEmpty()) {
+            return@withContext AppResult.Error("لا توجد مقاطع للدمج")
+        }
+
+        if (segments.size == 1) {
+            val singleCommand = "-y -i \"${segments[0].first}\" " +
+                "-c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -an \"$outputPath\""
+            val session = FFmpegKit.execute(singleCommand)
+            return@withContext if (ReturnCode.isSuccess(session.returnCode)) {
+                AppResult.Success(outputPath)
+            } else {
+                AppResult.Error("فشل تجهيز المقطع: ${session.allLogsAsString}")
+            }
+        }
+
+        val inputsBuilder = StringBuilder("-y ")
+        segments.forEach { (path, _) ->
+            inputsBuilder.append("-i \"$path\" ")
+        }
+
+        val filterBuilder = StringBuilder()
+        var cumulativeDuration = segments[0].second
+        var lastLabel = "0:v"
+
+        for (i in 1 until segments.size) {
+            val nextLabel = if (i == segments.size - 1) "vout" else "x$i"
+            val offset = (cumulativeDuration - transitionSeconds).coerceAtLeast(0.0)
+            filterBuilder.append(
+                "[$lastLabel][$i:v]xfade=transition=fade:duration=$transitionSeconds:offset=$offset[$nextLabel];"
+            )
+            cumulativeDuration = cumulativeDuration + segments[i].second - transitionSeconds
+            lastLabel = nextLabel
+        }
+
+        val filterComplex = filterBuilder.toString().trimEnd(';')
+        val command = "$inputsBuilder-filter_complex \"$filterComplex\" -map \"[$lastLabel]\" " +
+            "-c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p \"$outputPath\""
+
+        val session = FFmpegKit.execute(command)
+        if (ReturnCode.isSuccess(session.returnCode)) {
+            AppResult.Success(outputPath)
+        } else {
+            AppResult.Error("فشل دمج المقاطع بانتقالات سلسة: ${session.failStackTrace ?: session.allLogsAsString}")
+        }
+    }
+
     override suspend fun overlayCaptionImages(
         videoPath: String,
         captionOverlays: List<CaptionOverlay>,
         outputPath: String
     ): AppResult<String> = withContext(Dispatchers.IO) {
         if (captionOverlays.isEmpty()) {
-            val copySession = FFmpegKit.execute("-y -i \"$videoPath\" -c copy \"$outputPath\"")
+            val copySession = FFmpegKit.execute(
+                "-y -i \"$videoPath\" -c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p " +
+                    "-c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
+            )
             return@withContext if (ReturnCode.isSuccess(copySession.returnCode)) {
                 AppResult.Success(outputPath)
             } else {
-                AppResult.Error("فشل نسخ الفيديو: ${copySession.allLogsAsString}")
+                AppResult.Error("فشل معالجة الفيديو: ${copySession.allLogsAsString}")
             }
         }
 
@@ -146,7 +208,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
 
         val filterComplex = filterBuilder.toString().trimEnd(';')
         val command = "$inputsBuilder-filter_complex \"$filterComplex\" -map \"[$lastLabel]\" -map 0:a? " +
-            "-c:v mpeg4 -c:a aac \"$outputPath\""
+            "-c:v libx264 -preset veryfast -crf 20 -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {

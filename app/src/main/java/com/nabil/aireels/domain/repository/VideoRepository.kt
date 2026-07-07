@@ -21,4 +21,9 @@ interface VideoRepository {
         captionOverlays: List<CaptionOverlay>,
         outputPath: String
     ): AppResult<String>
+    suspend fun concatWithCrossfade(
+        segments: List<Pair<String, Double>>,
+        transitionSeconds: Double,
+        outputPath: String
+    ): AppResult<String>
 }

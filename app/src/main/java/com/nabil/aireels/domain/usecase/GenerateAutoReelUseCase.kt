@@ -3,7 +3,6 @@ package com.nabil.aireels.domain.usecase
 import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.render.CaptionRenderer
 import com.nabil.aireels.domain.model.CaptionOverlay
-import com.nabil.aireels.domain.model.Clip
 import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.repository.GeminiRepository
 import com.nabil.aireels.domain.repository.VideoRepository
@@ -48,7 +47,7 @@ class GenerateAutoReelUseCase @Inject constructor(
 
         onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
         val perImageDuration = durationSeconds.toDouble() / imagePaths.size
-        val segmentPaths = mutableListOf<String>()
+        val segmentPaths = mutableListOf<Pair<String, Double>>()
 
         imagePaths.forEachIndexed { index, imagePath ->
             val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
@@ -59,22 +58,25 @@ class GenerateAutoReelUseCase @Inject constructor(
                 width = videoWidth,
                 height = videoHeight
             )) {
-                is AppResult.Success -> segmentPaths.add(result.data)
+                is AppResult.Success -> segmentPaths.add(result.data to perImageDuration)
                 is AppResult.Error -> return AppResult.Error(result.message)
                 AppResult.Loading -> Unit
             }
         }
 
-        onProgress("جاري دمج المقاطع...")
-        val clipsAsModel = segmentPaths.mapIndexed { index, path ->
-            Clip(
-                id = index.toString(),
-                filePath = path,
-                durationMs = (perImageDuration * 1000).toLong()
-            )
+        onProgress("جاري دمج المقاطع بانتقالات سلسة...")
+        val transitionSeconds = if (segmentPaths.size > 1) {
+            minOf(0.6, perImageDuration * 0.3)
+        } else {
+            0.0
         }
+
         val slideshowFile = File(workingDir, "slideshow_${UUID.randomUUID()}.mp4")
-        val mergedResult = videoRepository.mergeClips(clipsAsModel, slideshowFile.absolutePath)
+        val mergedResult = videoRepository.concatWithCrossfade(
+            segments = segmentPaths,
+            transitionSeconds = transitionSeconds,
+            outputPath = slideshowFile.absolutePath
+        )
         val slideshowPath = when (mergedResult) {
             is AppResult.Success -> mergedResult.data
             is AppResult.Error -> return AppResult.Error(mergedResult.message)
@@ -108,6 +110,17 @@ class GenerateAutoReelUseCase @Inject constructor(
             )) {
                 is AppResult.Success -> videoAfterCaptions = captionResult.data
                 is AppResult.Error -> return AppResult.Error(captionResult.message)
+                AppResult.Loading -> Unit
+            }
+        } else {
+            val plainFile = File(workingDir, "plain_${UUID.randomUUID()}.mp4")
+            when (val plainResult = videoRepository.overlayCaptionImages(
+                videoPath = slideshowPath,
+                captionOverlays = emptyList(),
+                outputPath = plainFile.absolutePath
+            )) {
+                is AppResult.Success -> videoAfterCaptions = plainResult.data
+                is AppResult.Error -> return AppResult.Error(plainResult.message)
                 AppResult.Loading -> Unit
             }
         }

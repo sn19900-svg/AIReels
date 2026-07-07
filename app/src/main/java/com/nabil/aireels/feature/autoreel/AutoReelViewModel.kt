@@ -21,6 +21,9 @@ data class AutoReelUiState(
     val tone: String = "حماسي",
     val durationSeconds: Int = 20,
     val selectedImagePaths: List<String> = emptyList(),
+    val captionsEnabled: Boolean = true,
+    val audioEnabled: Boolean = false,
+    val selectedAudioPath: String? = null,
     val isProcessing: Boolean = false,
     val progressMessage: String = "",
     val resultVideoPath: String? = null,
@@ -44,6 +47,17 @@ class AutoReelViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(tone = value)
     }
 
+    fun onCaptionsEnabledChanged(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(captionsEnabled = enabled)
+    }
+
+    fun onAudioEnabledChanged(enabled: Boolean) {
+        _uiState.value = _uiState.value.copy(
+            audioEnabled = enabled,
+            selectedAudioPath = if (!enabled) null else _uiState.value.selectedAudioPath
+        )
+    }
+
     fun onImagesSelected(context: Context, uris: List<Uri>) {
         val cacheDir = File(context.cacheDir, "autoreel_images").apply { mkdirs() }
         val copiedPaths = uris.mapNotNull { uri ->
@@ -62,6 +76,21 @@ class AutoReelViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedImagePaths = copiedPaths)
     }
 
+    fun onAudioSelected(context: Context, uri: Uri) {
+        try {
+            val cacheDir = File(context.cacheDir, "autoreel_audio").apply { mkdirs() }
+            val destFile = File(cacheDir, "audio_${UUID.randomUUID()}.mp3")
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                FileOutputStream(destFile).use { output ->
+                    input.copyTo(output)
+                }
+            }
+            _uiState.value = _uiState.value.copy(selectedAudioPath = destFile.absolutePath)
+        } catch (e: Exception) {
+            _uiState.value = _uiState.value.copy(errorMessage = "فشل اختيار الملف الصوتي: ${e.message}")
+        }
+    }
+
     fun generateAutoReel(workingDir: File) {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(
@@ -70,11 +99,15 @@ class AutoReelViewModel @Inject constructor(
                 resultVideoPath = null
             )
 
+            val audioPathToUse = if (_uiState.value.audioEnabled) _uiState.value.selectedAudioPath else null
+
             val result = generateAutoReelUseCase(
                 topic = _uiState.value.topic,
                 tone = _uiState.value.tone,
                 durationSeconds = _uiState.value.durationSeconds,
                 imagePaths = _uiState.value.selectedImagePaths,
+                captionsEnabled = _uiState.value.captionsEnabled,
+                audioPath = audioPathToUse,
                 workingDir = workingDir,
                 onProgress = { message ->
                     _uiState.value = _uiState.value.copy(progressMessage = message)

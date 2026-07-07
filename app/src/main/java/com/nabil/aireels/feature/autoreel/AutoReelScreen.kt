@@ -3,7 +3,9 @@ package com.nabil.aireels.feature.autoreel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,10 +17,12 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -28,6 +32,7 @@ import java.io.File
 @Composable
 fun AutoReelScreen(
     onBack: () -> Unit,
+    onNavigateToExport: () -> Unit,
     viewModel: AutoReelViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -38,6 +43,14 @@ fun AutoReelScreen(
     ) { uris ->
         if (uris.isNotEmpty()) {
             viewModel.onImagesSelected(context, uris)
+        }
+    }
+
+    val audioPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.onAudioSelected(context, uri)
         }
     }
 
@@ -79,6 +92,50 @@ fun AutoReelScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "تفعيل الترجمة التلقائية على الفيديو")
+            Switch(
+                checked = uiState.captionsEnabled,
+                onCheckedChange = viewModel::onCaptionsEnabledChanged
+            )
+        }
+
+        Spacer(modifier = Modifier.height(8.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(text = "إضافة صوت من قبلي (موسيقى أو تعليق)")
+            Switch(
+                checked = uiState.audioEnabled,
+                onCheckedChange = viewModel::onAudioEnabledChanged
+            )
+        }
+
+        if (uiState.audioEnabled) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { audioPickerLauncher.launch("audio/*") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    text = if (uiState.selectedAudioPath != null) {
+                        "تم اختيار ملف صوتي ✓ (اضغط للتغيير)"
+                    } else {
+                        "اختيار ملف صوتي من الجهاز"
+                    }
+                )
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
         Button(
             onClick = {
                 val workingDir = File(context.getExternalFilesDir(null), "autoreel").apply { mkdirs() }
@@ -86,7 +143,8 @@ fun AutoReelScreen(
             },
             enabled = uiState.selectedImagePaths.isNotEmpty() &&
                 uiState.topic.isNotBlank() &&
-                !uiState.isProcessing,
+                !uiState.isProcessing &&
+                (!uiState.audioEnabled || uiState.selectedAudioPath != null),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(text = if (uiState.isProcessing) "جاري الإنشاء..." else "إنشاء الريلز تلقائياً")
@@ -106,7 +164,11 @@ fun AutoReelScreen(
 
         uiState.resultVideoPath?.let {
             Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "تم إنشاء الريلز بنجاح! يمكنك الآن الانتقال لشاشة التصدير لحفظه في المعرض")
+            Text(text = "تم إنشاء الريلز بنجاح!")
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(onClick = onNavigateToExport, modifier = Modifier.fillMaxWidth()) {
+                Text(text = "الانتقال إلى شاشة التصدير وحفظ الفيديو")
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))

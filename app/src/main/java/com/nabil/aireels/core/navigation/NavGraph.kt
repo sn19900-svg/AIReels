@@ -43,7 +43,10 @@ fun AiReelsNavGraph(navController: NavHostController = rememberNavController()) 
             ExportScreen(onBack = { navController.popBackStack(Screen.Home.route, false) })
         }
         composable(Screen.AutoReel.route) {
-            AutoReelScreen(onBack = { navController.popBackStack() })
+            AutoReelScreen(
+                onBack = { navController.popBackStack() },
+                onNavigateToExport = { navController.navigate(Screen.Export.route) }
+            )
         }
     }
 }

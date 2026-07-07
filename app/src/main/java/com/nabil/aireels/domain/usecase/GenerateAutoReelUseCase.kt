@@ -29,6 +29,8 @@ class GenerateAutoReelUseCase @Inject constructor(
         tone: String,
         durationSeconds: Int,
         imagePaths: List<String>,
+        captionsEnabled: Boolean,
+        audioPath: String?,
         workingDir: File,
         onProgress: (String) -> Unit
     ): AppResult<AutoReelResult> {
@@ -79,36 +81,54 @@ class GenerateAutoReelUseCase @Inject constructor(
             AppResult.Loading -> return AppResult.Error("حالة غير متوقعة")
         }
 
-        onProgress("جاري رسم الترجمة على الفيديو...")
-        val captionOverlays = script.captionCues.mapIndexed { index, cue ->
-            val pngFile = File(workingDir, "caption_${index}_${UUID.randomUUID()}.png")
-            captionRenderer.renderCaptionPng(
-                text = cue.text,
-                videoWidth = videoWidth,
-                videoHeight = videoHeight,
-                outputFile = pngFile
-            )
-            CaptionOverlay(
-                imagePath = pngFile.absolutePath,
-                startSeconds = cue.startSeconds,
-                endSeconds = cue.endSeconds
-            )
-        }
+        var videoAfterCaptions = slideshowPath
 
-        val finalFile = File(workingDir, "final_reel_${UUID.randomUUID()}.mp4")
-        val finalResult = videoRepository.overlayCaptionImages(
-            videoPath = slideshowPath,
-            captionOverlays = captionOverlays,
-            outputPath = finalFile.absolutePath
-        )
-
-        return when (finalResult) {
-            is AppResult.Success -> {
-                onProgress("اكتمل الريلز بنجاح!")
-                AppResult.Success(AutoReelResult(script = script, finalVideoPath = finalResult.data))
+        if (captionsEnabled) {
+            onProgress("جاري رسم الترجمة على الفيديو...")
+            val captionOverlays = script.captionCues.mapIndexed { index, cue ->
+                val pngFile = File(workingDir, "caption_${index}_${UUID.randomUUID()}.png")
+                captionRenderer.renderCaptionPng(
+                    text = cue.text,
+                    videoWidth = videoWidth,
+                    videoHeight = videoHeight,
+                    outputFile = pngFile
+                )
+                CaptionOverlay(
+                    imagePath = pngFile.absolutePath,
+                    startSeconds = cue.startSeconds,
+                    endSeconds = cue.endSeconds
+                )
             }
-            is AppResult.Error -> AppResult.Error(finalResult.message)
-            AppResult.Loading -> AppResult.Error("حالة غير متوقعة")
+
+            val captionedFile = File(workingDir, "captioned_${UUID.randomUUID()}.mp4")
+            when (val captionResult = videoRepository.overlayCaptionImages(
+                videoPath = slideshowPath,
+                captionOverlays = captionOverlays,
+                outputPath = captionedFile.absolutePath
+            )) {
+                is AppResult.Success -> videoAfterCaptions = captionResult.data
+                is AppResult.Error -> return AppResult.Error(captionResult.message)
+                AppResult.Loading -> Unit
+            }
         }
+
+        var finalPath = videoAfterCaptions
+
+        if (!audioPath.isNullOrBlank()) {
+            onProgress("جاري إضافة الصوت...")
+            val finalWithAudioFile = File(workingDir, "final_with_audio_${UUID.randomUUID()}.mp4")
+            when (val audioResult = videoRepository.addAudioTrack(
+                videoPath = videoAfterCaptions,
+                audioPath = audioPath,
+                outputPath = finalWithAudioFile.absolutePath
+            )) {
+                is AppResult.Success -> finalPath = audioResult.data
+                is AppResult.Error -> return AppResult.Error(audioResult.message)
+                AppResult.Loading -> Unit
+            }
+        }
+
+        onProgress("اكتمل الريلز بنجاح!")
+        return AppResult.Success(AutoReelResult(script = script, finalVideoPath = finalPath))
     }
 }

@@ -149,7 +149,7 @@ class GeminiRepositoryImpl @Inject constructor(
 
             أعطني الناتج بصيغة JSON فقط وبدون أي نص إضافي قبله أو بعده، بالمخطط التالي بالضبط.
             مهم جداً: مجموع أزمنة caption_cues يجب أن يغطي المدة كاملة من 0 إلى $durationSeconds بدون فجوات أو تداخل، وكل جملة قصيرة (4-8 كلمات).
-            مهم جداً أيضاً: قدّم بالضبط $imageCount من image_queries، وهي كلمات بحث بصرية بسيطة بالإنجليزية (2-4 كلمات لكل عبارة) تصف مشاهد واقعية حقيقية تناسب الموضوع، مناسبة للبحث في مكتبة صور فوتوغرافية احترافية (مثال: "misty pine forest morning"، "steaming coffee cup wood table"). لا تستخدم أسماء أشخاص مشهورين أو علامات تجارية:
+            مهم جداً أيضاً: قدّم بالضبط $imageCount من image_queries، وهي كلمات بحث بصرية سينمائية احترافية بالإنجليزية (3-6 كلمات لكل عبارة) بأسلوب إعلانات المنتجات الفاخرة (macro photography, cinematic lighting, slow motion, luxury aesthetic) تناسب الموضوع تماماً وتُرتب بترتيب سردي منطقي (بداية-وسط-نهاية)، مناسبة للبحث في مكتبة فيديو/صور Stock احترافية (مثال: "citrus splash macro slow motion"، "rose petals floating golden light"، "perfume bottle marble luxury"). لا تستخدم أسماء علامات تجارية أو أشخاص مشهورين أو أي اسم منتج محدد:
             {
               "hook": "جملة افتتاحية قوية لجذب المشاهد في أول 3 ثواني",
               "full_script": "النص الكامل للفيديو مقسم بفقرات قصيرة",

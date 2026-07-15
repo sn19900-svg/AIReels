@@ -17,6 +17,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -27,6 +28,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.nabil.aireels.domain.model.MediaSourceMode
 import java.io.File
 
 @Composable
@@ -60,7 +62,7 @@ fun AutoReelScreen(
             .padding(16.dp)
             .verticalScroll(rememberScrollState())
     ) {
-        Text(text = "توليد ريلز تلقائي من صور")
+        Text(text = "توليد ريلز تلقائي احترافي")
         Spacer(modifier = Modifier.height(16.dp))
 
         OutlinedTextField(
@@ -79,21 +81,43 @@ fun AutoReelScreen(
         )
         Spacer(modifier = Modifier.height(16.dp))
 
+        Text(text = "مصدر الصور/المشاهد:")
+        Spacer(modifier = Modifier.height(4.dp))
+
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(text = "دع الذكاء الاصطناعي يختار الصور تلقائياً (صور واقعية مجانية)")
-            Switch(
-                checked = uiState.useAiPhotos,
-                onCheckedChange = viewModel::onUseAiPhotosChanged
+            RadioButton(
+                selected = uiState.mediaSourceMode == MediaSourceMode.USER_PHOTOS,
+                onClick = { viewModel.onMediaSourceModeChanged(MediaSourceMode.USER_PHOTOS) }
             )
+            Text(text = "صوري الخاصة")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = uiState.mediaSourceMode == MediaSourceMode.AI_STOCK_PHOTOS,
+                onClick = { viewModel.onMediaSourceModeChanged(MediaSourceMode.AI_STOCK_PHOTOS) }
+            )
+            Text(text = "صور واقعية تلقائية (مجانية)")
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = uiState.mediaSourceMode == MediaSourceMode.AI_STOCK_VIDEO,
+                onClick = { viewModel.onMediaSourceModeChanged(MediaSourceMode.AI_STOCK_VIDEO) }
+            )
+            Text(text = "مقاطع فيديو سينمائية تلقائية (مجانية)")
         }
 
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        if (!uiState.useAiPhotos) {
+        if (uiState.mediaSourceMode == MediaSourceMode.USER_PHOTOS) {
             Button(
                 onClick = {
                     imagePickerLauncher.launch(
@@ -104,9 +128,8 @@ fun AutoReelScreen(
             ) {
                 Text(text = "اختيار الصور (${uiState.selectedImagePaths.size} محددة)")
             }
+            Spacer(modifier = Modifier.height(16.dp))
         }
-
-        Spacer(modifier = Modifier.height(16.dp))
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -157,7 +180,7 @@ fun AutoReelScreen(
                 val workingDir = File(context.getExternalFilesDir(null), "autoreel").apply { mkdirs() }
                 viewModel.generateAutoReel(workingDir)
             },
-            enabled = (uiState.useAiPhotos || uiState.selectedImagePaths.isNotEmpty()) &&
+            enabled = (uiState.mediaSourceMode != MediaSourceMode.USER_PHOTOS || uiState.selectedImagePaths.isNotEmpty()) &&
                 uiState.topic.isNotBlank() &&
                 !uiState.isProcessing &&
                 (!uiState.audioEnabled || uiState.selectedAudioPath != null),

@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.state.ProjectStateHolder
+import com.nabil.aireels.domain.model.MediaSourceMode
 import com.nabil.aireels.domain.usecase.GenerateAutoReelUseCase
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -21,7 +22,7 @@ data class AutoReelUiState(
     val tone: String = "حماسي",
     val durationSeconds: Int = 20,
     val selectedImagePaths: List<String> = emptyList(),
-    val useAiPhotos: Boolean = false,
+    val mediaSourceMode: MediaSourceMode = MediaSourceMode.USER_PHOTOS,
     val captionsEnabled: Boolean = true,
     val audioEnabled: Boolean = false,
     val selectedAudioPath: String? = null,
@@ -58,8 +59,8 @@ class AutoReelViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(captionsEnabled = enabled)
     }
 
-    fun onUseAiPhotosChanged(enabled: Boolean) {
-        _uiState.value = _uiState.value.copy(useAiPhotos = enabled)
+    fun onMediaSourceModeChanged(mode: MediaSourceMode) {
+        _uiState.value = _uiState.value.copy(mediaSourceMode = mode)
     }
 
     fun onAudioEnabledChanged(enabled: Boolean) {
@@ -117,7 +118,7 @@ class AutoReelViewModel @Inject constructor(
                 tone = _uiState.value.tone,
                 durationSeconds = _uiState.value.durationSeconds,
                 imagePaths = _uiState.value.selectedImagePaths,
-                useAiPhotos = _uiState.value.useAiPhotos,
+                mediaSourceMode = _uiState.value.mediaSourceMode,
                 captionsEnabled = _uiState.value.captionsEnabled,
                 audioPath = audioPathToUse,
                 workingDir = workingDir,

@@ -4,6 +4,7 @@ import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.render.CaptionRenderer
 import com.nabil.aireels.data.repository.PexelsRepository
 import com.nabil.aireels.domain.model.CaptionOverlay
+import com.nabil.aireels.domain.model.MediaSourceMode
 import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.repository.GeminiRepository
 import com.nabil.aireels.domain.repository.VideoRepository
@@ -30,14 +31,14 @@ class GenerateAutoReelUseCase @Inject constructor(
         tone: String,
         durationSeconds: Int,
         imagePaths: List<String>,
-        useAiPhotos: Boolean,
+        mediaSourceMode: MediaSourceMode,
         captionsEnabled: Boolean,
         audioPath: String?,
         workingDir: File,
         onProgress: (String) -> Unit
     ): AppResult<AutoReelResult> {
-        if (!useAiPhotos && imagePaths.isEmpty()) {
-            return AppResult.Error("الرجاء إرفاق صورة واحدة على الأقل، أو تفعيل اختيار الصور تلقائياً")
+        if (mediaSourceMode == MediaSourceMode.USER_PHOTOS && imagePaths.isEmpty()) {
+            return AppResult.Error("الرجاء إرفاق صورة واحدة على الأقل، أو اختيار وضع تلقائي")
         }
 
         onProgress("جاري توليد النص بالذكاء الاصطناعي...")
@@ -48,53 +49,78 @@ class GenerateAutoReelUseCase @Inject constructor(
             AppResult.Loading -> return AppResult.Error("حالة غير متوقعة")
         }
 
-        var finalImagePaths = imagePaths
-
-        if (useAiPhotos) {
-            if (script.imageQueries.isEmpty()) {
-                return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للصور، حاول مرة أخرى")
-            }
-            onProgress("جاري جلب صور مناسبة تلقائياً...")
-            val downloadedPaths = mutableListOf<String>()
-            script.imageQueries.forEachIndexed { index, query ->
-                val destFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
-                when (val result = pexelsRepository.searchAndDownloadPhoto(query, destFile)) {
-                    is AppResult.Success -> downloadedPaths.add(result.data)
-                    is AppResult.Error -> return AppResult.Error(result.message)
-                }
-            }
-            finalImagePaths = downloadedPaths
+        val itemCount = if (mediaSourceMode == MediaSourceMode.USER_PHOTOS) {
+            imagePaths.size
+        } else {
+            script.imageQueries.size.coerceAtLeast(1)
         }
-
-        if (finalImagePaths.isEmpty()) {
-            return AppResult.Error("لم يتم توفير أي صور صالحة لإنشاء الريلز")
-        }
-
-        onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
-        val perImageDuration = durationSeconds.toDouble() / finalImagePaths.size
+        val perItemDuration = durationSeconds.toDouble() / itemCount
         val segmentPaths = mutableListOf<Pair<String, Double>>()
 
-        finalImagePaths.forEachIndexed { index, imagePath ->
-            val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
-            when (val result = videoRepository.createKenBurnsSegment(
-                imagePath = imagePath,
-                durationSeconds = perImageDuration,
-                outputPath = segmentFile.absolutePath,
-                width = videoWidth,
-                height = videoHeight
-            )) {
-                is AppResult.Success -> segmentPaths.add(result.data to perImageDuration)
-                is AppResult.Error -> return AppResult.Error(result.message)
-                AppResult.Loading -> Unit
+        when (mediaSourceMode) {
+            MediaSourceMode.USER_PHOTOS -> {
+                onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
+                imagePaths.forEachIndexed { index, imagePath ->
+                    val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                    when (val result = videoRepository.createKenBurnsSegment(
+                        imagePath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                    )) {
+                        is AppResult.Success -> segmentPaths.add(result.data to perItemDuration)
+                        is AppResult.Error -> return AppResult.Error(result.message)
+                        AppResult.Loading -> Unit
+                    }
+                }
+            }
+
+            MediaSourceMode.AI_STOCK_PHOTOS -> {
+                if (script.imageQueries.isEmpty()) {
+                    return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للصور")
+                }
+                onProgress("جاري جلب صور مناسبة تلقائياً...")
+                script.imageQueries.forEachIndexed { index, query ->
+                    val photoFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
+                    when (val downloadResult = pexelsRepository.searchAndDownloadPhoto(query, photoFile)) {
+                        is AppResult.Success -> {
+                            val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                            when (val kbResult = videoRepository.createKenBurnsSegment(
+                                downloadResult.data, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                            )) {
+                                is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
+                                is AppResult.Error -> return AppResult.Error(kbResult.message)
+                                AppResult.Loading -> Unit
+                            }
+                        }
+                        is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                    }
+                }
+            }
+
+            MediaSourceMode.AI_STOCK_VIDEO -> {
+                if (script.imageQueries.isEmpty()) {
+                    return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد")
+                }
+                onProgress("جاري جلب مقاطع فيديو سينمائية تلقائياً...")
+                script.imageQueries.forEachIndexed { index, query ->
+                    val videoFile = File(workingDir, "ai_video_${index}_${UUID.randomUUID()}.mp4")
+                    when (val downloadResult = pexelsRepository.searchAndDownloadVideo(query, videoFile)) {
+                        is AppResult.Success -> {
+                            val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                            when (val prepResult = videoRepository.prepareStockVideoSegment(
+                                downloadResult.data, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                            )) {
+                                is AppResult.Success -> segmentPaths.add(prepResult.data to perItemDuration)
+                                is AppResult.Error -> return AppResult.Error(prepResult.message)
+                                AppResult.Loading -> Unit
+                            }
+                        }
+                        is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                    }
+                }
             }
         }
 
         onProgress("جاري دمج المقاطع بانتقالات سلسة...")
-        val transitionSeconds = if (segmentPaths.size > 1) {
-            minOf(0.6, perImageDuration * 0.3)
-        } else {
-            0.0
-        }
+        val transitionSeconds = if (segmentPaths.size > 1) minOf(0.6, perItemDuration * 0.3) else 0.0
 
         val slideshowFile = File(workingDir, "slideshow_${UUID.randomUUID()}.mp4")
         val mergedResult = videoRepository.concatWithCrossfade(
@@ -114,24 +140,12 @@ class GenerateAutoReelUseCase @Inject constructor(
             onProgress("جاري رسم الترجمة على الفيديو...")
             val captionOverlays = script.captionCues.mapIndexed { index, cue ->
                 val pngFile = File(workingDir, "caption_${index}_${UUID.randomUUID()}.png")
-                captionRenderer.renderCaptionPng(
-                    text = cue.text,
-                    videoWidth = videoWidth,
-                    videoHeight = videoHeight,
-                    outputFile = pngFile
-                )
-                CaptionOverlay(
-                    imagePath = pngFile.absolutePath,
-                    startSeconds = cue.startSeconds,
-                    endSeconds = cue.endSeconds
-                )
+                captionRenderer.renderCaptionPng(cue.text, videoWidth, videoHeight, pngFile)
+                CaptionOverlay(pngFile.absolutePath, cue.startSeconds, cue.endSeconds)
             }
-
             val captionedFile = File(workingDir, "captioned_${UUID.randomUUID()}.mp4")
             when (val captionResult = videoRepository.overlayCaptionImages(
-                videoPath = slideshowPath,
-                captionOverlays = captionOverlays,
-                outputPath = captionedFile.absolutePath
+                slideshowPath, captionOverlays, captionedFile.absolutePath
             )) {
                 is AppResult.Success -> videoAfterCaptions = captionResult.data
                 is AppResult.Error -> return AppResult.Error(captionResult.message)
@@ -140,9 +154,7 @@ class GenerateAutoReelUseCase @Inject constructor(
         } else {
             val plainFile = File(workingDir, "plain_${UUID.randomUUID()}.mp4")
             when (val plainResult = videoRepository.overlayCaptionImages(
-                videoPath = slideshowPath,
-                captionOverlays = emptyList(),
-                outputPath = plainFile.absolutePath
+                slideshowPath, emptyList(), plainFile.absolutePath
             )) {
                 is AppResult.Success -> videoAfterCaptions = plainResult.data
                 is AppResult.Error -> return AppResult.Error(plainResult.message)
@@ -156,9 +168,7 @@ class GenerateAutoReelUseCase @Inject constructor(
             onProgress("جاري إضافة الصوت...")
             val finalWithAudioFile = File(workingDir, "final_with_audio_${UUID.randomUUID()}.mp4")
             when (val audioResult = videoRepository.addAudioTrack(
-                videoPath = videoAfterCaptions,
-                audioPath = audioPath,
-                outputPath = finalWithAudioFile.absolutePath
+                videoAfterCaptions, audioPath, finalWithAudioFile.absolutePath
             )) {
                 is AppResult.Success -> finalPath = audioResult.data
                 is AppResult.Error -> return AppResult.Error(audioResult.message)

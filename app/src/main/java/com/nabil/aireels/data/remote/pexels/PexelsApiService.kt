@@ -12,4 +12,12 @@ interface PexelsApiService {
         @Query("per_page") perPage: Int = 1,
         @Query("orientation") orientation: String = "portrait"
     ): PexelsSearchResponse
+
+    @GET("videos/search")
+    suspend fun searchVideos(
+        @Header("Authorization") apiKey: String,
+        @Query("query") query: String,
+        @Query("per_page") perPage: Int = 3,
+        @Query("orientation") orientation: String = "portrait"
+    ): PexelsVideoSearchResponse
 }

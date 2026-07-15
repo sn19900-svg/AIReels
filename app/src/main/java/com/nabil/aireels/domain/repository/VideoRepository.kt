@@ -26,4 +26,11 @@ interface VideoRepository {
         transitionSeconds: Double,
         outputPath: String
     ): AppResult<String>
+    suspend fun prepareStockVideoSegment(
+        videoPath: String,
+        durationSeconds: Double,
+        outputPath: String,
+        width: Int,
+        height: Int
+    ): AppResult<String>
 }

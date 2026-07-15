@@ -125,6 +125,27 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         }
     }
 
+    override suspend fun prepareStockVideoSegment(
+        videoPath: String,
+        durationSeconds: Double,
+        outputPath: String,
+        width: Int,
+        height: Int
+    ): AppResult<String> = withContext(Dispatchers.IO) {
+        val vf = "scale=$width:$height:force_original_aspect_ratio=increase," +
+            "crop=$width:$height,fps=30,format=yuv420p"
+
+        val command = "-y -stream_loop -1 -i \"$videoPath\" -t $durationSeconds " +
+            "-vf \"$vf\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
+
+        val session = FFmpegKit.execute(command)
+        if (ReturnCode.isSuccess(session.returnCode)) {
+            AppResult.Success(outputPath)
+        } else {
+            AppResult.Error("فشل تجهيز مقطع الفيديو الجاهز: ${session.failStackTrace ?: session.allLogsAsString}")
+        }
+    }
+
     override suspend fun concatWithCrossfade(
         segments: List<Pair<String, Double>>,
         transitionSeconds: Double,

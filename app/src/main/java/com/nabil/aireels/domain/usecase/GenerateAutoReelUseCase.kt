@@ -60,13 +60,14 @@ class GenerateAutoReelUseCase @Inject constructor(
         when (mediaSourceMode) {
             MediaSourceMode.USER_PHOTOS -> {
                 onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
-                imagePaths.forEachIndexed { index, imagePath ->
+                for ((index, imagePath) in imagePaths.withIndex()) {
                     val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
-                    when (val result = videoRepository.createKenBurnsSegment(
+                    val kbResult = videoRepository.createKenBurnsSegment(
                         imagePath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
-                    )) {
-                        is AppResult.Success -> segmentPaths.add(result.data to perItemDuration)
-                        is AppResult.Error -> return AppResult.Error(result.message)
+                    )
+                    when (kbResult) {
+                        is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
+                        is AppResult.Error -> return AppResult.Error(kbResult.message)
                         AppResult.Loading -> Unit
                     }
                 }
@@ -77,20 +78,23 @@ class GenerateAutoReelUseCase @Inject constructor(
                     return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للصور")
                 }
                 onProgress("جاري جلب صور مناسبة تلقائياً...")
-                script.imageQueries.forEachIndexed { index, query ->
+                for ((index, query) in script.imageQueries.withIndex()) {
                     val photoFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
-                    when (val downloadResult = pexelsRepository.searchAndDownloadPhoto(query, photoFile)) {
-                        is AppResult.Success -> {
-                            val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
-                            when (val kbResult = videoRepository.createKenBurnsSegment(
-                                downloadResult.data, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
-                            )) {
-                                is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
-                                is AppResult.Error -> return AppResult.Error(kbResult.message)
-                                AppResult.Loading -> Unit
-                            }
-                        }
+                    val downloadResult = pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                    val downloadedPath = when (downloadResult) {
+                        is AppResult.Success -> downloadResult.data
                         is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                        AppResult.Loading -> continue
+                    }
+
+                    val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                    val kbResult = videoRepository.createKenBurnsSegment(
+                        downloadedPath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                    )
+                    when (kbResult) {
+                        is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
+                        is AppResult.Error -> return AppResult.Error(kbResult.message)
+                        AppResult.Loading -> Unit
                     }
                 }
             }
@@ -100,20 +104,23 @@ class GenerateAutoReelUseCase @Inject constructor(
                     return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد")
                 }
                 onProgress("جاري جلب مقاطع فيديو سينمائية تلقائياً...")
-                script.imageQueries.forEachIndexed { index, query ->
+                for ((index, query) in script.imageQueries.withIndex()) {
                     val videoFile = File(workingDir, "ai_video_${index}_${UUID.randomUUID()}.mp4")
-                    when (val downloadResult = pexelsRepository.searchAndDownloadVideo(query, videoFile)) {
-                        is AppResult.Success -> {
-                            val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
-                            when (val prepResult = videoRepository.prepareStockVideoSegment(
-                                downloadResult.data, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
-                            )) {
-                                is AppResult.Success -> segmentPaths.add(prepResult.data to perItemDuration)
-                                is AppResult.Error -> return AppResult.Error(prepResult.message)
-                                AppResult.Loading -> Unit
-                            }
-                        }
+                    val downloadResult = pexelsRepository.searchAndDownloadVideo(query, videoFile)
+                    val downloadedPath = when (downloadResult) {
+                        is AppResult.Success -> downloadResult.data
                         is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                        AppResult.Loading -> continue
+                    }
+
+                    val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                    val prepResult = videoRepository.prepareStockVideoSegment(
+                        downloadedPath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                    )
+                    when (prepResult) {
+                        is AppResult.Success -> segmentPaths.add(prepResult.data to perItemDuration)
+                        is AppResult.Error -> return AppResult.Error(prepResult.message)
+                        AppResult.Loading -> Unit
                     }
                 }
             }
@@ -144,18 +151,20 @@ class GenerateAutoReelUseCase @Inject constructor(
                 CaptionOverlay(pngFile.absolutePath, cue.startSeconds, cue.endSeconds)
             }
             val captionedFile = File(workingDir, "captioned_${UUID.randomUUID()}.mp4")
-            when (val captionResult = videoRepository.overlayCaptionImages(
+            val captionResult = videoRepository.overlayCaptionImages(
                 slideshowPath, captionOverlays, captionedFile.absolutePath
-            )) {
+            )
+            when (captionResult) {
                 is AppResult.Success -> videoAfterCaptions = captionResult.data
                 is AppResult.Error -> return AppResult.Error(captionResult.message)
                 AppResult.Loading -> Unit
             }
         } else {
             val plainFile = File(workingDir, "plain_${UUID.randomUUID()}.mp4")
-            when (val plainResult = videoRepository.overlayCaptionImages(
+            val plainResult = videoRepository.overlayCaptionImages(
                 slideshowPath, emptyList(), plainFile.absolutePath
-            )) {
+            )
+            when (plainResult) {
                 is AppResult.Success -> videoAfterCaptions = plainResult.data
                 is AppResult.Error -> return AppResult.Error(plainResult.message)
                 AppResult.Loading -> Unit
@@ -167,9 +176,10 @@ class GenerateAutoReelUseCase @Inject constructor(
         if (!audioPath.isNullOrBlank()) {
             onProgress("جاري إضافة الصوت...")
             val finalWithAudioFile = File(workingDir, "final_with_audio_${UUID.randomUUID()}.mp4")
-            when (val audioResult = videoRepository.addAudioTrack(
+            val audioResult = videoRepository.addAudioTrack(
                 videoAfterCaptions, audioPath, finalWithAudioFile.absolutePath
-            )) {
+            )
+            when (audioResult) {
                 is AppResult.Success -> finalPath = audioResult.data
                 is AppResult.Error -> return AppResult.Error(audioResult.message)
                 AppResult.Loading -> Unit

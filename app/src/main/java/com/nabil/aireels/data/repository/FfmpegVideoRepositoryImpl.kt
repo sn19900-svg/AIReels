@@ -5,6 +5,7 @@ import com.arthenica.ffmpegkit.ReturnCode
 import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.domain.model.CaptionOverlay
 import com.nabil.aireels.domain.model.Clip
+import com.nabil.aireels.domain.model.KenBurnsMotionStyle
 import com.nabil.aireels.domain.repository.VideoRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -98,19 +99,56 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         durationSeconds: Double,
         outputPath: String,
         width: Int,
-        height: Int
+        height: Int,
+        motionStyle: KenBurnsMotionStyle
     ): AppResult<String> = withContext(Dispatchers.IO) {
         val fps = 30
         val totalFrames = (durationSeconds * fps).toInt().coerceAtLeast(fps)
         val bigWidth = width * 2
         val bigHeight = height * 2
 
+        val zoomExpr: String
+        val xExpr: String
+        val yExpr: String
+
+        when (motionStyle) {
+            KenBurnsMotionStyle.ZOOM_IN -> {
+                zoomExpr = "1.0+0.12*(on/$totalFrames)"
+                xExpr = "iw/2-(iw/zoom/2)"
+                yExpr = "ih/2-(ih/zoom/2)"
+            }
+            KenBurnsMotionStyle.ZOOM_OUT -> {
+                zoomExpr = "1.12-0.12*(on/$totalFrames)"
+                xExpr = "iw/2-(iw/zoom/2)"
+                yExpr = "ih/2-(ih/zoom/2)"
+            }
+            KenBurnsMotionStyle.PAN_LEFT_TO_RIGHT, KenBurnsMotionStyle.PAN_RIGHT_TO_LEFT -> {
+                val fixedZoom = 1.18
+                val cropW = bigWidth / fixedZoom
+                val cropH = bigHeight / fixedZoom
+                val horizontalSlack = bigWidth - cropW
+                val yCenter = (bigHeight - cropH) / 2.0
+                val panAmplitude = horizontalSlack * 0.85
+                val xCenterPoint = (bigWidth - cropW) / 2.0
+                val startX = (xCenterPoint - panAmplitude / 2.0).coerceIn(0.0, horizontalSlack)
+                val endX = (xCenterPoint + panAmplitude / 2.0).coerceIn(0.0, horizontalSlack)
+
+                zoomExpr = fixedZoom.toString()
+                yExpr = yCenter.toString()
+                xExpr = if (motionStyle == KenBurnsMotionStyle.PAN_LEFT_TO_RIGHT) {
+                    "$startX+($endX-$startX)*(on/$totalFrames)"
+                } else {
+                    "$endX-($endX-$startX)*(on/$totalFrames)"
+                }
+            }
+        }
+
         val filterComplex =
             "[0:v]scale=$bigWidth:$bigHeight:force_original_aspect_ratio=increase," +
                 "crop=$bigWidth:$bigHeight,gblur=sigma=30,eq=brightness=-0.08[bg];" +
                 "[1:v]scale=$bigWidth:$bigHeight:force_original_aspect_ratio=decrease[fg];" +
                 "[bg][fg]overlay=(W-w)/2:(H-h)/2," +
-                "zoompan=z='min(zoom+0.0006,1.12)':d=$totalFrames:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=$fps," +
+                "zoompan=z='$zoomExpr':d=$totalFrames:x='$xExpr':y='$yExpr':s=${width}x${height}:fps=$fps," +
                 "format=yuv420p[vout]"
 
         val command = "-y -loop 1 -t $durationSeconds -i \"$imagePath\" " +
@@ -149,6 +187,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
     override suspend fun concatWithCrossfade(
         segments: List<Pair<String, Double>>,
         transitionSeconds: Double,
+        transitionNames: List<String>,
         outputPath: String
     ): AppResult<String> = withContext(Dispatchers.IO) {
         if (segments.isEmpty()) {
@@ -178,8 +217,9 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         for (i in 1 until segments.size) {
             val nextLabel = if (i == segments.size - 1) "vout" else "x$i"
             val offset = (cumulativeDuration - transitionSeconds).coerceAtLeast(0.0)
+            val transitionName = transitionNames.getOrElse(i - 1) { "fade" }
             filterBuilder.append(
-                "[$lastLabel][$i:v]xfade=transition=fade:duration=$transitionSeconds:offset=$offset[$nextLabel];"
+                "[$lastLabel][$i:v]xfade=transition=$transitionName:duration=$transitionSeconds:offset=$offset[$nextLabel];"
             )
             cumulativeDuration = cumulativeDuration + segments[i].second - transitionSeconds
             lastLabel = nextLabel

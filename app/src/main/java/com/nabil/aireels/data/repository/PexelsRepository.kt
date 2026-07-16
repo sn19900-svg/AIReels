@@ -3,6 +3,7 @@ package com.nabil.aireels.data.repository
 import com.nabil.aireels.BuildConfig
 import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.remote.pexels.PexelsApiService
+import com.nabil.aireels.data.remote.pexels.PexelsVideoFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
@@ -11,6 +12,7 @@ import java.io.File
 import java.io.FileOutputStream
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlin.random.Random
 
 @Singleton
 class PexelsRepository @Inject constructor(
@@ -28,10 +30,16 @@ class PexelsRepository @Inject constructor(
                 }
 
                 val response = pexelsApiService.searchPhotos(apiKey = apiKey, query = query)
-                val photoUrl = response.photos.firstOrNull()?.src?.large2x
-                    ?: return@withContext AppResult.Error("لم يتم العثور على صورة مناسبة لـ: $query")
+                if (response.photos.isEmpty()) {
+                    return@withContext AppResult.Error("لم يتم العثور على صورة مناسبة لـ: $query")
+                }
 
-                downloadToFile(photoUrl, destFile)
+                val portraitPhotos = response.photos.filter { it.height > it.width }
+                val candidates = portraitPhotos.ifEmpty { response.photos }
+                val topCandidates = candidates.take(3)
+                val chosenPhoto = topCandidates[Random.nextInt(topCandidates.size)]
+
+                downloadToFile(chosenPhoto.src.large2x, destFile)
             } catch (e: Exception) {
                 AppResult.Error("فشل تحميل صورة من Pexels: ${e.message}", e)
             }
@@ -48,13 +56,14 @@ class PexelsRepository @Inject constructor(
                 }
 
                 val response = pexelsApiService.searchVideos(apiKey = apiKey, query = query)
-                val video = response.videos.firstOrNull()
-                    ?: return@withContext AppResult.Error("لم يتم العثور على مقطع فيديو مناسب لـ: $query")
+                if (response.videos.isEmpty()) {
+                    return@withContext AppResult.Error("لم يتم العثور على مقطع فيديو مناسب لـ: $query")
+                }
 
-                val bestFile = video.videoFiles
-                    .filter { file -> (file.height ?: 0) >= (file.width ?: 0) && (file.height ?: 0) in 720..1920 }
-                    .maxByOrNull { file -> file.height ?: 0 }
-                    ?: video.videoFiles.maxByOrNull { file -> (file.width ?: 0) * (file.height ?: 0) }
+                val topVideos = response.videos.take(3)
+                val chosenVideo = topVideos[Random.nextInt(topVideos.size)]
+
+                val bestFile = selectBestVideoFile(chosenVideo.videoFiles)
                     ?: return@withContext AppResult.Error("لا توجد ملفات فيديو صالحة لـ: $query")
 
                 downloadToFile(bestFile.link, destFile)
@@ -62,6 +71,18 @@ class PexelsRepository @Inject constructor(
                 AppResult.Error("فشل تحميل فيديو من Pexels: ${e.message}", e)
             }
         }
+
+    private fun selectBestVideoFile(files: List<PexelsVideoFile>): PexelsVideoFile? {
+        val portraitMp4Files = files.filter { file ->
+            val width = file.width ?: 0
+            val height = file.height ?: 0
+            file.fileType == "video/mp4" && height > width && height in 480..1920
+        }
+
+        return portraitMp4Files.maxByOrNull { it.height ?: 0 }
+            ?: files.filter { it.fileType == "video/mp4" }
+                .maxByOrNull { (it.width ?: 0) * (it.height ?: 0) }
+    }
 
     private fun downloadToFile(url: String, destFile: File): AppResult<String> {
         val request = Request.Builder().url(url).build()

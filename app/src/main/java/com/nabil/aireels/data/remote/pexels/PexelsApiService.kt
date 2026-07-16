@@ -9,7 +9,7 @@ interface PexelsApiService {
     suspend fun searchPhotos(
         @Header("Authorization") apiKey: String,
         @Query("query") query: String,
-        @Query("per_page") perPage: Int = 1,
+        @Query("per_page") perPage: Int = 6,
         @Query("orientation") orientation: String = "portrait"
     ): PexelsSearchResponse
 
@@ -17,7 +17,7 @@ interface PexelsApiService {
     suspend fun searchVideos(
         @Header("Authorization") apiKey: String,
         @Query("query") query: String,
-        @Query("per_page") perPage: Int = 3,
+        @Query("per_page") perPage: Int = 6,
         @Query("orientation") orientation: String = "portrait"
     ): PexelsVideoSearchResponse
 }

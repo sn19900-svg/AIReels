@@ -4,6 +4,7 @@ import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.render.CaptionRenderer
 import com.nabil.aireels.data.repository.PexelsRepository
 import com.nabil.aireels.domain.model.CaptionOverlay
+import com.nabil.aireels.domain.model.KenBurnsMotionStyle
 import com.nabil.aireels.domain.model.MediaSourceMode
 import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.repository.GeminiRepository
@@ -25,6 +26,22 @@ class GenerateAutoReelUseCase @Inject constructor(
 ) {
     private val videoWidth = 1080
     private val videoHeight = 1920
+
+    private val motionStyleCycle = listOf(
+        KenBurnsMotionStyle.ZOOM_IN,
+        KenBurnsMotionStyle.PAN_LEFT_TO_RIGHT,
+        KenBurnsMotionStyle.ZOOM_OUT,
+        KenBurnsMotionStyle.PAN_RIGHT_TO_LEFT
+    )
+
+    private val transitionCycle = listOf(
+        "fade",
+        "smoothleft",
+        "circleopen",
+        "dissolve",
+        "smoothright",
+        "zoomin"
+    )
 
     suspend operator fun invoke(
         topic: String,
@@ -62,8 +79,9 @@ class GenerateAutoReelUseCase @Inject constructor(
                 onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
                 for ((index, imagePath) in imagePaths.withIndex()) {
                     val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                    val motionStyle = motionStyleCycle[index % motionStyleCycle.size]
                     val kbResult = videoRepository.createKenBurnsSegment(
-                        imagePath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                        imagePath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight, motionStyle
                     )
                     when (kbResult) {
                         is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
@@ -88,8 +106,9 @@ class GenerateAutoReelUseCase @Inject constructor(
                     }
 
                     val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
+                    val motionStyle = motionStyleCycle[index % motionStyleCycle.size]
                     val kbResult = videoRepository.createKenBurnsSegment(
-                        downloadedPath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
+                        downloadedPath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight, motionStyle
                     )
                     when (kbResult) {
                         is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
@@ -126,13 +145,17 @@ class GenerateAutoReelUseCase @Inject constructor(
             }
         }
 
-        onProgress("جاري دمج المقاطع بانتقالات سلسة...")
+        onProgress("جاري دمج المقاطع بانتقالات سينمائية متنوعة...")
         val transitionSeconds = if (segmentPaths.size > 1) minOf(0.6, perItemDuration * 0.3) else 0.0
+        val transitionNamesForThisReel = (0 until (segmentPaths.size - 1).coerceAtLeast(0)).map { i ->
+            transitionCycle[i % transitionCycle.size]
+        }
 
         val slideshowFile = File(workingDir, "slideshow_${UUID.randomUUID()}.mp4")
         val mergedResult = videoRepository.concatWithCrossfade(
             segments = segmentPaths,
             transitionSeconds = transitionSeconds,
+            transitionNames = transitionNamesForThisReel,
             outputPath = slideshowFile.absolutePath
         )
         val slideshowPath = when (mergedResult) {

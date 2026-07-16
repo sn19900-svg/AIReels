@@ -7,6 +7,8 @@ data class PexelsSearchResponse(
 )
 
 data class PexelsPhoto(
+    val width: Int,
+    val height: Int,
     val src: PexelsPhotoSrc
 )
 

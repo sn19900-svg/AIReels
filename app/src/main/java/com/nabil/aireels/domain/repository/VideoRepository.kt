@@ -3,6 +3,7 @@ package com.nabil.aireels.domain.repository
 import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.domain.model.CaptionOverlay
 import com.nabil.aireels.domain.model.Clip
+import com.nabil.aireels.domain.model.KenBurnsMotionStyle
 
 interface VideoRepository {
     suspend fun trimClip(inputPath: String, startMs: Long, endMs: Long, outputPath: String): AppResult<String>
@@ -14,7 +15,8 @@ interface VideoRepository {
         durationSeconds: Double,
         outputPath: String,
         width: Int,
-        height: Int
+        height: Int,
+        motionStyle: KenBurnsMotionStyle
     ): AppResult<String>
     suspend fun overlayCaptionImages(
         videoPath: String,
@@ -24,6 +26,7 @@ interface VideoRepository {
     suspend fun concatWithCrossfade(
         segments: List<Pair<String, Double>>,
         transitionSeconds: Double,
+        transitionNames: List<String>,
         outputPath: String
     ): AppResult<String>
     suspend fun prepareStockVideoSegment(

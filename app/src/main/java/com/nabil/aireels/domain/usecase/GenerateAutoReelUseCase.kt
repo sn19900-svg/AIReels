@@ -10,6 +10,7 @@ import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.repository.GeminiRepository
 import com.nabil.aireels.domain.repository.VideoRepository
 import kotlinx.coroutines.async
+import java.util.concurrent.atomic.AtomicInteger
 import kotlinx.coroutines.coroutineScope
 import java.io.File
 import java.util.UUID
@@ -89,10 +90,15 @@ class GenerateAutoReelUseCase @Inject constructor(
                 val brollDuration = unitDuration
                 val heroDuration = unitDuration * heroWeight
 
+                val completedCounterHybrid = AtomicInteger(0)
+                val totalToFetchHybrid = script.imageQueries.size
                 val downloadJobs = script.imageQueries.mapIndexed { index, query ->
                     async {
                         val photoFile = File(workingDir, "broll_photo_${index}_${UUID.randomUUID()}.jpg")
-                        pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                        val result = pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                        val done = completedCounterHybrid.incrementAndGet()
+                        onProgress("تم جلب $done من $totalToFetchHybrid مشهد تمهيدي...")
+                        result
                     }
                 }
                 val downloadResults = downloadJobs.map { it.await() }
@@ -151,10 +157,15 @@ class GenerateAutoReelUseCase @Inject constructor(
                 }
                 onProgress("جاري جلب ${script.imageQueries.size} صورة بالتوازي...")
 
+                val completedCounterPhotos = AtomicInteger(0)
+                val totalToFetchPhotos = script.imageQueries.size
                 val downloadJobs = script.imageQueries.mapIndexed { index, query ->
                     async {
                         val photoFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
-                        pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                        val result = pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                        val done = completedCounterPhotos.incrementAndGet()
+                        onProgress("تم جلب $done من $totalToFetchPhotos صورة...")
+                        result
                     }
                 }
                 val downloadResults = downloadJobs.map { it.await() }
@@ -184,10 +195,15 @@ class GenerateAutoReelUseCase @Inject constructor(
                 }
                 onProgress("جاري جلب ${script.imageQueries.size} مقطع فيديو بالتوازي...")
 
+                val completedCounterVideos = AtomicInteger(0)
+                val totalToFetchVideos = script.imageQueries.size
                 val downloadJobs = script.imageQueries.mapIndexed { index, query ->
                     async {
                         val videoFile = File(workingDir, "ai_video_${index}_${UUID.randomUUID()}.mp4")
-                        pexelsRepository.searchAndDownloadVideo(query, videoFile)
+                        val result = pexelsRepository.searchAndDownloadVideo(query, videoFile)
+                        val done = completedCounterVideos.incrementAndGet()
+                        onProgress("تم جلب $done من $totalToFetchVideos مقطع فيديو...")
+                        result
                     }
                 }
                 val downloadResults = downloadJobs.map { it.await() }

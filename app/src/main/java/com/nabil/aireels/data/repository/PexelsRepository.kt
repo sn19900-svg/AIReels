@@ -5,6 +5,10 @@ import com.nabil.aireels.core.util.AppResult
 import com.nabil.aireels.data.remote.pexels.PexelsApiService
 import com.nabil.aireels.data.remote.pexels.PexelsVideoFile
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -22,25 +26,29 @@ class PexelsRepository @Inject constructor(
     suspend fun searchAndDownloadPhoto(query: String, destFile: File): AppResult<String> =
         withContext(Dispatchers.IO) {
             try {
-                val apiKey = BuildConfig.PEXELS_API_KEY
-                if (apiKey.isBlank()) {
-                    return@withContext AppResult.Error(
-                        "مفتاح Pexels API غير موجود. أضفه في local.properties أو GitHub Secrets"
-                    )
+                withTimeout(25_000L) {
+                    val apiKey = BuildConfig.PEXELS_API_KEY
+                    if (apiKey.isBlank()) {
+                        return@withTimeout AppResult.Error(
+                            "مفتاح Pexels API غير موجود. أضفه في local.properties أو GitHub Secrets"
+                        )
+                    }
+
+                    val response = pexelsApiService.searchPhotos(apiKey = apiKey, query = query)
+                    if (response.photos.isEmpty()) {
+                        return@withTimeout AppResult.Error("لم يتم العثور على صورة مناسبة لـ: $query")
+                    }
+
+                    val portraitPhotos = response.photos.filter { it.height > it.width }
+                    val candidates = portraitPhotos.ifEmpty { response.photos }
+                    val topCandidates = candidates.take(3)
+                    val chosenPhoto = topCandidates[Random.nextInt(topCandidates.size)]
+
+                    // "large" (~940px) كافية تماماً لإخراج 1080x1920، وأسرع بكثير من large2x
+                    downloadToFile(chosenPhoto.src.large, destFile)
                 }
-
-                val response = pexelsApiService.searchPhotos(apiKey = apiKey, query = query)
-                if (response.photos.isEmpty()) {
-                    return@withContext AppResult.Error("لم يتم العثور على صورة مناسبة لـ: $query")
-                }
-
-                val portraitPhotos = response.photos.filter { it.height > it.width }
-                val candidates = portraitPhotos.ifEmpty { response.photos }
-                val topCandidates = candidates.take(3)
-                val chosenPhoto = topCandidates[Random.nextInt(topCandidates.size)]
-
-                // "large" (~940px) كافية تماماً لإخراج 1080x1920، وأسرع بكثير من large2x
-                downloadToFile(chosenPhoto.src.large, destFile)
+            } catch (e: TimeoutCancellationException) {
+                AppResult.Error("انتهت مهلة جلب الصورة لـ: $query (تحقق من الاتصال بالإنترنت)")
             } catch (e: Exception) {
                 AppResult.Error("فشل تحميل صورة من Pexels: ${e.message}", e)
             }
@@ -49,25 +57,29 @@ class PexelsRepository @Inject constructor(
     suspend fun searchAndDownloadVideo(query: String, destFile: File): AppResult<String> =
         withContext(Dispatchers.IO) {
             try {
-                val apiKey = BuildConfig.PEXELS_API_KEY
-                if (apiKey.isBlank()) {
-                    return@withContext AppResult.Error(
-                        "مفتاح Pexels API غير موجود. أضفه في local.properties أو GitHub Secrets"
-                    )
+                withTimeout(40_000L) {
+                    val apiKey = BuildConfig.PEXELS_API_KEY
+                    if (apiKey.isBlank()) {
+                        return@withTimeout AppResult.Error(
+                            "مفتاح Pexels API غير موجود. أضفه في local.properties أو GitHub Secrets"
+                        )
+                    }
+
+                    val response = pexelsApiService.searchVideos(apiKey = apiKey, query = query)
+                    if (response.videos.isEmpty()) {
+                        return@withTimeout AppResult.Error("لم يتم العثور على مقطع فيديو مناسب لـ: $query")
+                    }
+
+                    val topVideos = response.videos.take(3)
+                    val chosenVideo = topVideos[Random.nextInt(topVideos.size)]
+
+                    val bestFile = selectBestVideoFile(chosenVideo.videoFiles)
+                        ?: return@withTimeout AppResult.Error("لا توجد ملفات فيديو صالحة لـ: $query")
+
+                    downloadToFile(bestFile.link, destFile)
                 }
-
-                val response = pexelsApiService.searchVideos(apiKey = apiKey, query = query)
-                if (response.videos.isEmpty()) {
-                    return@withContext AppResult.Error("لم يتم العثور على مقطع فيديو مناسب لـ: $query")
-                }
-
-                val topVideos = response.videos.take(3)
-                val chosenVideo = topVideos[Random.nextInt(topVideos.size)]
-
-                val bestFile = selectBestVideoFile(chosenVideo.videoFiles)
-                    ?: return@withContext AppResult.Error("لا توجد ملفات فيديو صالحة لـ: $query")
-
-                downloadToFile(bestFile.link, destFile)
+            } catch (e: TimeoutCancellationException) {
+                AppResult.Error("انتهت مهلة جلب الفيديو لـ: $query (تحقق من الاتصال بالإنترنت)")
             } catch (e: Exception) {
                 AppResult.Error("فشل تحميل فيديو من Pexels: ${e.message}", e)
             }

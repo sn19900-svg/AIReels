@@ -36,4 +36,16 @@ interface VideoRepository {
         width: Int,
         height: Int
     ): AppResult<String>
+    suspend fun createHeroImageSegment(
+        imagePath: String,
+        durationSeconds: Double,
+        outputPath: String,
+        width: Int,
+        height: Int
+    ): AppResult<String>
+    suspend fun applyColorGrade(
+        videoPath: String,
+        colorGrade: String,
+        outputPath: String
+    ): AppResult<String>
 }

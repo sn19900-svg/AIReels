@@ -75,6 +75,53 @@ class GenerateAutoReelUseCase @Inject constructor(
         val segmentPaths = mutableListOf<Pair<String, Double>>()
 
         when (mediaSourceMode) {
+            MediaSourceMode.HYBRID_HERO_PLUS_AI -> {
+                if (script.imageQueries.isEmpty()) {
+                    return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد التمهيدية")
+                }
+                onProgress("جاري جلب مشاهد تمهيدية احترافية...")
+                val brollCount = script.imageQueries.size
+                val heroCount = imagePaths.size
+                val heroWeight = 1.5
+                val totalWeight = brollCount + heroCount * heroWeight
+                val unitDuration = durationSeconds.toDouble() / totalWeight
+                val brollDuration = unitDuration
+                val heroDuration = unitDuration * heroWeight
+
+                for ((index, query) in script.imageQueries.withIndex()) {
+                    val photoFile = File(workingDir, "broll_photo_${index}_${UUID.randomUUID()}.jpg")
+                    val downloadResult = pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                    val downloadedPath = when (downloadResult) {
+                        is AppResult.Success -> downloadResult.data
+                        is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                        AppResult.Loading -> continue
+                    }
+                    val segmentFile = File(workingDir, "broll_segment_${index}_${UUID.randomUUID()}.mp4")
+                    val motionStyle = motionStyleCycle[index % motionStyleCycle.size]
+                    val kbResult = videoRepository.createKenBurnsSegment(
+                        downloadedPath, brollDuration, segmentFile.absolutePath, videoWidth, videoHeight, motionStyle
+                    )
+                    when (kbResult) {
+                        is AppResult.Success -> segmentPaths.add(kbResult.data to brollDuration)
+                        is AppResult.Error -> return AppResult.Error(kbResult.message)
+                        AppResult.Loading -> Unit
+                    }
+                }
+
+                onProgress("جاري تجهيز اللقطة البطولية...")
+                for ((index, heroImagePath) in imagePaths.withIndex()) {
+                    val heroSegmentFile = File(workingDir, "hero_segment_${index}_${UUID.randomUUID()}.mp4")
+                    val heroResult = videoRepository.createHeroImageSegment(
+                        heroImagePath, heroDuration, heroSegmentFile.absolutePath, videoWidth, videoHeight
+                    )
+                    when (heroResult) {
+                        is AppResult.Success -> segmentPaths.add(heroResult.data to heroDuration)
+                        is AppResult.Error -> return AppResult.Error(heroResult.message)
+                        AppResult.Loading -> Unit
+                    }
+                }
+            }
+
             MediaSourceMode.USER_PHOTOS -> {
                 onProgress("جاري إنشاء المقاطع المتحركة من الصور...")
                 for ((index, imagePath) in imagePaths.withIndex()) {
@@ -164,7 +211,18 @@ class GenerateAutoReelUseCase @Inject constructor(
             AppResult.Loading -> return AppResult.Error("حالة غير متوقعة")
         }
 
-        var videoAfterCaptions = slideshowPath
+        onProgress("جاري تطبيق تدريج الألوان السينمائي...")
+        val gradedFile = File(workingDir, "graded_${UUID.randomUUID()}.mp4")
+        val gradedResult = videoRepository.applyColorGrade(
+            slideshowPath, script.colorGrade, gradedFile.absolutePath
+        )
+        val gradedPath = when (gradedResult) {
+            is AppResult.Success -> gradedResult.data
+            is AppResult.Error -> slideshowPath
+            AppResult.Loading -> slideshowPath
+        }
+
+        var videoAfterCaptions = gradedPath
 
         if (captionsEnabled) {
             onProgress("جاري رسم الترجمة على الفيديو...")

@@ -114,10 +114,22 @@ fun AutoReelScreen(
             )
             Text(text = "مقاطع فيديو سينمائية تلقائية (مجانية)")
         }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            RadioButton(
+                selected = uiState.mediaSourceMode == MediaSourceMode.HYBRID_HERO_PLUS_AI,
+                onClick = { viewModel.onMediaSourceModeChanged(MediaSourceMode.HYBRID_HERO_PLUS_AI) }
+            )
+            Text(text = "صورتي كلقطة ختامية + مشاهد AI تمهيدية")
+        }
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        if (uiState.mediaSourceMode == MediaSourceMode.USER_PHOTOS) {
+        if (uiState.mediaSourceMode == MediaSourceMode.USER_PHOTOS ||
+            uiState.mediaSourceMode == MediaSourceMode.HYBRID_HERO_PLUS_AI
+        ) {
             Button(
                 onClick = {
                     imagePickerLauncher.launch(
@@ -180,7 +192,7 @@ fun AutoReelScreen(
                 val workingDir = File(context.getExternalFilesDir(null), "autoreel").apply { mkdirs() }
                 viewModel.generateAutoReel(workingDir)
             },
-            enabled = (uiState.mediaSourceMode != MediaSourceMode.USER_PHOTOS || uiState.selectedImagePaths.isNotEmpty()) &&
+            enabled = ((uiState.mediaSourceMode != MediaSourceMode.USER_PHOTOS && uiState.mediaSourceMode != MediaSourceMode.HYBRID_HERO_PLUS_AI) || uiState.selectedImagePaths.isNotEmpty()) &&
                 uiState.topic.isNotBlank() &&
                 !uiState.isProcessing &&
                 (!uiState.audioEnabled || uiState.selectedAudioPath != null),

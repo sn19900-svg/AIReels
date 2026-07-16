@@ -83,6 +83,8 @@ class GeminiRepositoryImpl @Inject constructor(
                 }
             }
 
+            val colorGrade = json.optString("color_grade", "neutral")
+
             val imageQueriesArray = json.optJSONArray("image_queries")
             val imageQueries = mutableListOf<String>()
             if (imageQueriesArray != null) {
@@ -105,6 +107,7 @@ class GeminiRepositoryImpl @Inject constructor(
                 captions = captions,
                 captionCues = captionCues,
                 imageQueries = imageQueries,
+                colorGrade = colorGrade,
                 hashtags = hashtags
             )
 
@@ -149,7 +152,8 @@ class GeminiRepositoryImpl @Inject constructor(
 
             أعطني الناتج بصيغة JSON فقط وبدون أي نص إضافي قبله أو بعده، بالمخطط التالي بالضبط.
             مهم جداً: مجموع أزمنة caption_cues يجب أن يغطي المدة كاملة من 0 إلى $durationSeconds بدون فجوات أو تداخل، وكل جملة قصيرة (4-8 كلمات).
-            مهم جداً أيضاً: قدّم بالضبط $imageCount من image_queries، وهي كلمات بحث بصرية سينمائية احترافية بالإنجليزية (3-6 كلمات لكل عبارة) بأسلوب إعلانات المنتجات الفاخرة (macro photography, cinematic lighting, slow motion, luxury aesthetic) تناسب الموضوع تماماً وتُرتب بترتيب سردي منطقي (بداية-وسط-نهاية)، مناسبة للبحث في مكتبة فيديو/صور Stock احترافية (مثال: "citrus splash macro slow motion"، "rose petals floating golden light"، "perfume bottle marble luxury"). لا تستخدم أسماء علامات تجارية أو أشخاص مشهورين أو أي اسم منتج محدد:
+            مهم جداً أيضاً: قدّم بالضبط $imageCount من image_queries، وهي كلمات بحث بصرية سينمائية احترافية بالإنجليزية (3-6 كلمات لكل عبارة) بأسلوب إعلانات المنتجات الفاخرة (macro photography, cinematic lighting, slow motion, luxury aesthetic) تناسب الموضوع تماماً وتُرتب بترتيب سردي منطقي (بداية-وسط-نهاية)، مناسبة للبحث في مكتبة فيديو/صور Stock احترافية (مثال: "citrus splash macro slow motion"، "rose petals floating golden light"، "perfume bottle marble luxury"). لا تستخدم أسماء علامات تجارية أو أشخاص مشهورين أو أي اسم منتج محدد.
+مهم جداً أيضاً: اختر color_grade واحدة فقط تناسب مزاج الموضوع تماماً، من هذه القيم بالضبط: "warm" (للفخامة/الرومانسية/الدفء)، "cool" (للتقنية/الهدوء/الحداثة)، "vibrant" (للطاقة/الحيوية/الشباب)، "neutral" (للمحايد/التوثيقي):
             {
               "hook": "جملة افتتاحية قوية لجذب المشاهد في أول 3 ثواني",
               "full_script": "النص الكامل للفيديو مقسم بفقرات قصيرة",
@@ -159,6 +163,7 @@ class GeminiRepositoryImpl @Inject constructor(
                 {"text": "سطر الترجمة الثاني", "start": 3.5, "end": 7}
               ],
               "image_queries": ["query 1", "query 2"],
+              "color_grade": "warm",
               "hashtags": ["#وسم1", "#وسم2", "#وسم3"]
             }
         """.trimIndent()

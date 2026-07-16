@@ -163,6 +163,63 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         }
     }
 
+    override suspend fun createHeroImageSegment(
+        imagePath: String,
+        durationSeconds: Double,
+        outputPath: String,
+        width: Int,
+        height: Int
+    ): AppResult<String> = withContext(Dispatchers.IO) {
+        val fps = 30
+        val totalFrames = (durationSeconds * fps).toInt().coerceAtLeast(fps)
+        val bigWidth = width * 2
+        val bigHeight = height * 2
+
+        val filterComplex =
+            "[0:v]scale=$bigWidth:$bigHeight:force_original_aspect_ratio=increase," +
+                "crop=$bigWidth:$bigHeight,gblur=sigma=35,eq=brightness=-0.1[bg];" +
+                "[1:v]scale=$bigWidth:$bigHeight:force_original_aspect_ratio=decrease[fg];" +
+                "[bg][fg]overlay=(W-w)/2:(H-h)/2," +
+                "zoompan=z='min(zoom+0.0003,1.06)':d=$totalFrames:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${width}x${height}:fps=$fps," +
+                "eq=contrast=1.06:saturation=1.12:brightness=0.02,vignette=PI/6," +
+                "format=yuv420p[vout]"
+
+        val command = "-y -loop 1 -t $durationSeconds -i \"$imagePath\" " +
+            "-loop 1 -t $durationSeconds -i \"$imagePath\" " +
+            "-filter_complex \"$filterComplex\" -map \"[vout]\" -c:v mpeg4 -q:v 2 -an \"$outputPath\""
+
+        val session = FFmpegKit.execute(command)
+        if (ReturnCode.isSuccess(session.returnCode)) {
+            AppResult.Success(outputPath)
+        } else {
+            AppResult.Error("فشل إنشاء اللقطة البطولية: ${session.failStackTrace ?: session.allLogsAsString}")
+        }
+    }
+
+    override suspend fun applyColorGrade(
+        videoPath: String,
+        colorGrade: String,
+        outputPath: String
+    ): AppResult<String> = withContext(Dispatchers.IO) {
+        val vf = when (colorGrade.lowercase()) {
+            "warm" -> "eq=contrast=1.05:saturation=1.15," +
+                "colorbalance=rs=0.08:gs=0.02:bs=-0.08:rm=0.05:bm=-0.05"
+            "cool" -> "eq=contrast=1.03:saturation=1.05," +
+                "colorbalance=rs=-0.05:bs=0.08:rm=-0.03:bm=0.05"
+            "vibrant" -> "eq=contrast=1.08:saturation=1.3"
+            else -> "eq=contrast=1.02:saturation=1.05"
+        }
+
+        val command = "-y -i \"$videoPath\" -vf \"$vf\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
+
+        val session = FFmpegKit.execute(command)
+        if (ReturnCode.isSuccess(session.returnCode)) {
+            AppResult.Success(outputPath)
+        } else {
+            AppResult.Error("فشل تطبيق تدريج الألوان: ${session.failStackTrace ?: session.allLogsAsString}")
+        }
+    }
+
     override suspend fun prepareStockVideoSegment(
         videoPath: String,
         durationSeconds: Double,

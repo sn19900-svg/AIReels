@@ -6,10 +6,8 @@ import com.nabil.aireels.data.remote.pexels.PexelsApiService
 import com.nabil.aireels.data.remote.pexels.PexelsVideoFile
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
-import kotlinx.coroutines.TimeoutCancellationException
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.io.File
@@ -44,7 +42,6 @@ class PexelsRepository @Inject constructor(
                     val topCandidates = candidates.take(3)
                     val chosenPhoto = topCandidates[Random.nextInt(topCandidates.size)]
 
-                    // "large" (~940px) كافية تماماً لإخراج 1080x1920، وأسرع بكثير من large2x
                     downloadToFile(chosenPhoto.src.large, destFile)
                 }
             } catch (e: TimeoutCancellationException) {
@@ -86,8 +83,6 @@ class PexelsRepository @Inject constructor(
         }
 
     private fun selectBestVideoFile(files: List<PexelsVideoFile>): PexelsVideoFile? {
-        // نفضّل جودة معتدلة (480-720) بدل أعلى دقة، لأن الفيديو سيُصغّر لـ 1080x1920 لاحقاً
-        // وطلب FHD كامل يبطئ التحميل بدون أي فائدة بصرية إضافية
         val portraitMp4Files = files.filter { file ->
             val width = file.width ?: 0
             val height = file.height ?: 0

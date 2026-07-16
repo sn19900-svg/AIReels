@@ -39,7 +39,8 @@ class PexelsRepository @Inject constructor(
                 val topCandidates = candidates.take(3)
                 val chosenPhoto = topCandidates[Random.nextInt(topCandidates.size)]
 
-                downloadToFile(chosenPhoto.src.large2x, destFile)
+                // "large" (~940px) كافية تماماً لإخراج 1080x1920، وأسرع بكثير من large2x
+                downloadToFile(chosenPhoto.src.large, destFile)
             } catch (e: Exception) {
                 AppResult.Error("فشل تحميل صورة من Pexels: ${e.message}", e)
             }
@@ -73,15 +74,22 @@ class PexelsRepository @Inject constructor(
         }
 
     private fun selectBestVideoFile(files: List<PexelsVideoFile>): PexelsVideoFile? {
+        // نفضّل جودة معتدلة (480-720) بدل أعلى دقة، لأن الفيديو سيُصغّر لـ 1080x1920 لاحقاً
+        // وطلب FHD كامل يبطئ التحميل بدون أي فائدة بصرية إضافية
         val portraitMp4Files = files.filter { file ->
             val width = file.width ?: 0
             val height = file.height ?: 0
-            file.fileType == "video/mp4" && height > width && height in 480..1920
+            file.fileType == "video/mp4" && height > width && height in 480..900
         }
 
         return portraitMp4Files.maxByOrNull { it.height ?: 0 }
+            ?: files.filter { file ->
+                val width = file.width ?: 0
+                val height = file.height ?: 0
+                file.fileType == "video/mp4" && height > width
+            }.minByOrNull { it.height ?: Int.MAX_VALUE }
             ?: files.filter { it.fileType == "video/mp4" }
-                .maxByOrNull { (it.width ?: 0) * (it.height ?: 0) }
+                .minByOrNull { (it.width ?: 0) * (it.height ?: 0) }
     }
 
     private fun downloadToFile(url: String, destFile: File): AppResult<String> {

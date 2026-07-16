@@ -9,6 +9,8 @@ import com.nabil.aireels.domain.model.MediaSourceMode
 import com.nabil.aireels.domain.model.ScriptSuggestion
 import com.nabil.aireels.domain.repository.GeminiRepository
 import com.nabil.aireels.domain.repository.VideoRepository
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import java.io.File
 import java.util.UUID
 import javax.inject.Inject
@@ -53,17 +55,17 @@ class GenerateAutoReelUseCase @Inject constructor(
         audioPath: String?,
         workingDir: File,
         onProgress: (String) -> Unit
-    ): AppResult<AutoReelResult> {
+    ): AppResult<AutoReelResult> = coroutineScope {
         if (mediaSourceMode == MediaSourceMode.USER_PHOTOS && imagePaths.isEmpty()) {
-            return AppResult.Error("الرجاء إرفاق صورة واحدة على الأقل، أو اختيار وضع تلقائي")
+            return@coroutineScope AppResult.Error("الرجاء إرفاق صورة واحدة على الأقل، أو اختيار وضع تلقائي")
         }
 
         onProgress("جاري توليد النص بالذكاء الاصطناعي...")
         val scriptResult = geminiRepository.generateReelScript(topic, tone, durationSeconds)
         val script = when (scriptResult) {
             is AppResult.Success -> scriptResult.data
-            is AppResult.Error -> return AppResult.Error(scriptResult.message)
-            AppResult.Loading -> return AppResult.Error("حالة غير متوقعة")
+            is AppResult.Error -> return@coroutineScope AppResult.Error(scriptResult.message)
+            AppResult.Loading -> return@coroutineScope AppResult.Error("حالة غير متوقعة")
         }
 
         val itemCount = if (mediaSourceMode == MediaSourceMode.USER_PHOTOS) {
@@ -77,23 +79,28 @@ class GenerateAutoReelUseCase @Inject constructor(
         when (mediaSourceMode) {
             MediaSourceMode.HYBRID_HERO_PLUS_AI -> {
                 if (script.imageQueries.isEmpty()) {
-                    return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد التمهيدية")
+                    return@coroutineScope AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد التمهيدية")
                 }
-                onProgress("جاري جلب مشاهد تمهيدية احترافية...")
-                val brollCount = script.imageQueries.size
-                val heroCount = imagePaths.size
+                onProgress("جاري جلب ${script.imageQueries.size} مشهد تمهيدي بالتوازي...")
+
                 val heroWeight = 1.5
-                val totalWeight = brollCount + heroCount * heroWeight
+                val totalWeight = script.imageQueries.size + imagePaths.size * heroWeight
                 val unitDuration = durationSeconds.toDouble() / totalWeight
                 val brollDuration = unitDuration
                 val heroDuration = unitDuration * heroWeight
 
-                for ((index, query) in script.imageQueries.withIndex()) {
-                    val photoFile = File(workingDir, "broll_photo_${index}_${UUID.randomUUID()}.jpg")
-                    val downloadResult = pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                val downloadJobs = script.imageQueries.mapIndexed { index, query ->
+                    async {
+                        val photoFile = File(workingDir, "broll_photo_${index}_${UUID.randomUUID()}.jpg")
+                        pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                    }
+                }
+                val downloadResults = downloadJobs.map { it.await() }
+
+                for ((index, downloadResult) in downloadResults.withIndex()) {
                     val downloadedPath = when (downloadResult) {
                         is AppResult.Success -> downloadResult.data
-                        is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(downloadResult.message)
                         AppResult.Loading -> continue
                     }
                     val segmentFile = File(workingDir, "broll_segment_${index}_${UUID.randomUUID()}.mp4")
@@ -103,7 +110,7 @@ class GenerateAutoReelUseCase @Inject constructor(
                     )
                     when (kbResult) {
                         is AppResult.Success -> segmentPaths.add(kbResult.data to brollDuration)
-                        is AppResult.Error -> return AppResult.Error(kbResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(kbResult.message)
                         AppResult.Loading -> Unit
                     }
                 }
@@ -116,7 +123,7 @@ class GenerateAutoReelUseCase @Inject constructor(
                     )
                     when (heroResult) {
                         is AppResult.Success -> segmentPaths.add(heroResult.data to heroDuration)
-                        is AppResult.Error -> return AppResult.Error(heroResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(heroResult.message)
                         AppResult.Loading -> Unit
                     }
                 }
@@ -132,7 +139,7 @@ class GenerateAutoReelUseCase @Inject constructor(
                     )
                     when (kbResult) {
                         is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
-                        is AppResult.Error -> return AppResult.Error(kbResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(kbResult.message)
                         AppResult.Loading -> Unit
                     }
                 }
@@ -140,18 +147,24 @@ class GenerateAutoReelUseCase @Inject constructor(
 
             MediaSourceMode.AI_STOCK_PHOTOS -> {
                 if (script.imageQueries.isEmpty()) {
-                    return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للصور")
+                    return@coroutineScope AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للصور")
                 }
-                onProgress("جاري جلب صور مناسبة تلقائياً...")
-                for ((index, query) in script.imageQueries.withIndex()) {
-                    val photoFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
-                    val downloadResult = pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                onProgress("جاري جلب ${script.imageQueries.size} صورة بالتوازي...")
+
+                val downloadJobs = script.imageQueries.mapIndexed { index, query ->
+                    async {
+                        val photoFile = File(workingDir, "ai_photo_${index}_${UUID.randomUUID()}.jpg")
+                        pexelsRepository.searchAndDownloadPhoto(query, photoFile)
+                    }
+                }
+                val downloadResults = downloadJobs.map { it.await() }
+
+                for ((index, downloadResult) in downloadResults.withIndex()) {
                     val downloadedPath = when (downloadResult) {
                         is AppResult.Success -> downloadResult.data
-                        is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(downloadResult.message)
                         AppResult.Loading -> continue
                     }
-
                     val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
                     val motionStyle = motionStyleCycle[index % motionStyleCycle.size]
                     val kbResult = videoRepository.createKenBurnsSegment(
@@ -159,7 +172,7 @@ class GenerateAutoReelUseCase @Inject constructor(
                     )
                     when (kbResult) {
                         is AppResult.Success -> segmentPaths.add(kbResult.data to perItemDuration)
-                        is AppResult.Error -> return AppResult.Error(kbResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(kbResult.message)
                         AppResult.Loading -> Unit
                     }
                 }
@@ -167,25 +180,31 @@ class GenerateAutoReelUseCase @Inject constructor(
 
             MediaSourceMode.AI_STOCK_VIDEO -> {
                 if (script.imageQueries.isEmpty()) {
-                    return AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد")
+                    return@coroutineScope AppResult.Error("لم يقترح الذكاء الاصطناعي كلمات بحث للمشاهد")
                 }
-                onProgress("جاري جلب مقاطع فيديو سينمائية تلقائياً...")
-                for ((index, query) in script.imageQueries.withIndex()) {
-                    val videoFile = File(workingDir, "ai_video_${index}_${UUID.randomUUID()}.mp4")
-                    val downloadResult = pexelsRepository.searchAndDownloadVideo(query, videoFile)
+                onProgress("جاري جلب ${script.imageQueries.size} مقطع فيديو بالتوازي...")
+
+                val downloadJobs = script.imageQueries.mapIndexed { index, query ->
+                    async {
+                        val videoFile = File(workingDir, "ai_video_${index}_${UUID.randomUUID()}.mp4")
+                        pexelsRepository.searchAndDownloadVideo(query, videoFile)
+                    }
+                }
+                val downloadResults = downloadJobs.map { it.await() }
+
+                for ((index, downloadResult) in downloadResults.withIndex()) {
                     val downloadedPath = when (downloadResult) {
                         is AppResult.Success -> downloadResult.data
-                        is AppResult.Error -> return AppResult.Error(downloadResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(downloadResult.message)
                         AppResult.Loading -> continue
                     }
-
                     val segmentFile = File(workingDir, "segment_${index}_${UUID.randomUUID()}.mp4")
                     val prepResult = videoRepository.prepareStockVideoSegment(
                         downloadedPath, perItemDuration, segmentFile.absolutePath, videoWidth, videoHeight
                     )
                     when (prepResult) {
                         is AppResult.Success -> segmentPaths.add(prepResult.data to perItemDuration)
-                        is AppResult.Error -> return AppResult.Error(prepResult.message)
+                        is AppResult.Error -> return@coroutineScope AppResult.Error(prepResult.message)
                         AppResult.Loading -> Unit
                     }
                 }
@@ -207,8 +226,8 @@ class GenerateAutoReelUseCase @Inject constructor(
         )
         val slideshowPath = when (mergedResult) {
             is AppResult.Success -> mergedResult.data
-            is AppResult.Error -> return AppResult.Error(mergedResult.message)
-            AppResult.Loading -> return AppResult.Error("حالة غير متوقعة")
+            is AppResult.Error -> return@coroutineScope AppResult.Error(mergedResult.message)
+            AppResult.Loading -> return@coroutineScope AppResult.Error("حالة غير متوقعة")
         }
 
         onProgress("جاري تطبيق تدريج الألوان السينمائي...")
@@ -233,21 +252,21 @@ class GenerateAutoReelUseCase @Inject constructor(
             }
             val captionedFile = File(workingDir, "captioned_${UUID.randomUUID()}.mp4")
             val captionResult = videoRepository.overlayCaptionImages(
-                slideshowPath, captionOverlays, captionedFile.absolutePath
+                gradedPath, captionOverlays, captionedFile.absolutePath
             )
             when (captionResult) {
                 is AppResult.Success -> videoAfterCaptions = captionResult.data
-                is AppResult.Error -> return AppResult.Error(captionResult.message)
+                is AppResult.Error -> return@coroutineScope AppResult.Error(captionResult.message)
                 AppResult.Loading -> Unit
             }
         } else {
             val plainFile = File(workingDir, "plain_${UUID.randomUUID()}.mp4")
             val plainResult = videoRepository.overlayCaptionImages(
-                slideshowPath, emptyList(), plainFile.absolutePath
+                gradedPath, emptyList(), plainFile.absolutePath
             )
             when (plainResult) {
                 is AppResult.Success -> videoAfterCaptions = plainResult.data
-                is AppResult.Error -> return AppResult.Error(plainResult.message)
+                is AppResult.Error -> return@coroutineScope AppResult.Error(plainResult.message)
                 AppResult.Loading -> Unit
             }
         }
@@ -262,12 +281,12 @@ class GenerateAutoReelUseCase @Inject constructor(
             )
             when (audioResult) {
                 is AppResult.Success -> finalPath = audioResult.data
-                is AppResult.Error -> return AppResult.Error(audioResult.message)
+                is AppResult.Error -> return@coroutineScope AppResult.Error(audioResult.message)
                 AppResult.Loading -> Unit
             }
         }
 
         onProgress("اكتمل الريلز بنجاح!")
-        return AppResult.Success(AutoReelResult(script = script, finalVideoPath = finalPath))
+        AppResult.Success(AutoReelResult(script = script, finalVideoPath = finalPath))
     }
 }

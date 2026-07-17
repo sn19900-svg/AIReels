@@ -14,6 +14,17 @@ import javax.inject.Inject
 
 class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
 
+    private val fps = 24
+
+    private fun colorGradeFilter(colorGrade: String): String {
+        return when (colorGrade.lowercase()) {
+            "warm" -> "eq=contrast=1.05:saturation=1.15,colorbalance=rs=0.08:gs=0.02:bs=-0.08:rm=0.05:bm=-0.05"
+            "cool" -> "eq=contrast=1.03:saturation=1.05,colorbalance=rs=-0.05:bs=0.08:rm=-0.03:bm=0.05"
+            "vibrant" -> "eq=contrast=1.08:saturation=1.3"
+            else -> "eq=contrast=1.02:saturation=1.05"
+        }
+    }
+
     override suspend fun trimClip(
         inputPath: String,
         startMs: Long,
@@ -22,8 +33,8 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
     ): AppResult<String> = withContext(Dispatchers.IO) {
         val startSeconds = startMs / 1000.0
         val durationSeconds = (endMs - startMs) / 1000.0
-        val command = "-y -i \"$inputPath\" -ss $startSeconds -t $durationSeconds " +
-            "-c:v mpeg4 -q:v 3 -c:a aac \"$outputPath\""
+        val command = "-y -threads 0 -i \"$inputPath\" -ss $startSeconds -t $durationSeconds " +
+            "-c:v mpeg4 -q:v 4 -c:a aac \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -51,8 +62,8 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
             }
         }
 
-        val command = "-y -f concat -safe 0 -i \"${listFile.absolutePath}\" " +
-            "-c:v mpeg4 -q:v 3 -c:a aac \"$outputPath\""
+        val command = "-y -threads 0 -f concat -safe 0 -i \"${listFile.absolutePath}\" " +
+            "-c:v mpeg4 -q:v 4 -c:a aac \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         listFile.delete()
@@ -69,7 +80,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         audioPath: String,
         outputPath: String
     ): AppResult<String> = withContext(Dispatchers.IO) {
-        val command = "-y -i \"$videoPath\" -i \"$audioPath\" " +
+        val command = "-y -threads 0 -i \"$videoPath\" -i \"$audioPath\" " +
             "-c:v copy -c:a aac -b:a 128k -map 0:v:0 -map 1:a:0 -shortest -movflags +faststart \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
@@ -84,7 +95,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         videoPath: String,
         outputPath: String
     ): AppResult<String> = withContext(Dispatchers.IO) {
-        val command = "-y -i \"$videoPath\" -vn -ac 1 -ar 16000 -f wav \"$outputPath\""
+        val command = "-y -threads 0 -i \"$videoPath\" -vn -ac 1 -ar 16000 -f wav \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -102,7 +113,6 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         height: Int,
         motionStyle: KenBurnsMotionStyle
     ): AppResult<String> = withContext(Dispatchers.IO) {
-        val fps = 30
         val totalFrames = (durationSeconds * fps).toInt().coerceAtLeast(fps)
         val bigWidth = width * 2
         val bigHeight = height * 2
@@ -151,9 +161,9 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
                 "zoompan=z='$zoomExpr':d=$totalFrames:x='$xExpr':y='$yExpr':s=${width}x${height}:fps=$fps," +
                 "format=yuv420p[vout]"
 
-        val command = "-y -loop 1 -t $durationSeconds -i \"$imagePath\" " +
+        val command = "-y -threads 0 -loop 1 -t $durationSeconds -i \"$imagePath\" " +
             "-loop 1 -t $durationSeconds -i \"$imagePath\" " +
-            "-filter_complex \"$filterComplex\" -map \"[vout]\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
+            "-filter_complex \"$filterComplex\" -map \"[vout]\" -c:v mpeg4 -q:v 4 -an \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -170,7 +180,6 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         width: Int,
         height: Int
     ): AppResult<String> = withContext(Dispatchers.IO) {
-        val fps = 30
         val totalFrames = (durationSeconds * fps).toInt().coerceAtLeast(fps)
         val bigWidth = width * 2
         val bigHeight = height * 2
@@ -184,39 +193,15 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
                 "eq=contrast=1.06:saturation=1.12:brightness=0.02,vignette=PI/6," +
                 "format=yuv420p[vout]"
 
-        val command = "-y -loop 1 -t $durationSeconds -i \"$imagePath\" " +
+        val command = "-y -threads 0 -loop 1 -t $durationSeconds -i \"$imagePath\" " +
             "-loop 1 -t $durationSeconds -i \"$imagePath\" " +
-            "-filter_complex \"$filterComplex\" -map \"[vout]\" -c:v mpeg4 -q:v 2 -an \"$outputPath\""
+            "-filter_complex \"$filterComplex\" -map \"[vout]\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
             AppResult.Success(outputPath)
         } else {
             AppResult.Error("فشل إنشاء اللقطة البطولية: ${session.failStackTrace ?: session.allLogsAsString}")
-        }
-    }
-
-    override suspend fun applyColorGrade(
-        videoPath: String,
-        colorGrade: String,
-        outputPath: String
-    ): AppResult<String> = withContext(Dispatchers.IO) {
-        val vf = when (colorGrade.lowercase()) {
-            "warm" -> "eq=contrast=1.05:saturation=1.15," +
-                "colorbalance=rs=0.08:gs=0.02:bs=-0.08:rm=0.05:bm=-0.05"
-            "cool" -> "eq=contrast=1.03:saturation=1.05," +
-                "colorbalance=rs=-0.05:bs=0.08:rm=-0.03:bm=0.05"
-            "vibrant" -> "eq=contrast=1.08:saturation=1.3"
-            else -> "eq=contrast=1.02:saturation=1.05"
-        }
-
-        val command = "-y -i \"$videoPath\" -vf \"$vf\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
-
-        val session = FFmpegKit.execute(command)
-        if (ReturnCode.isSuccess(session.returnCode)) {
-            AppResult.Success(outputPath)
-        } else {
-            AppResult.Error("فشل تطبيق تدريج الألوان: ${session.failStackTrace ?: session.allLogsAsString}")
         }
     }
 
@@ -228,16 +213,32 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         height: Int
     ): AppResult<String> = withContext(Dispatchers.IO) {
         val vf = "scale=$width:$height:force_original_aspect_ratio=increase," +
-            "crop=$width:$height,fps=30,format=yuv420p"
+            "crop=$width:$height,fps=$fps,format=yuv420p"
 
-        val command = "-y -stream_loop -1 -i \"$videoPath\" -t $durationSeconds " +
-            "-vf \"$vf\" -c:v mpeg4 -q:v 3 -an \"$outputPath\""
+        val command = "-y -threads 0 -stream_loop -1 -i \"$videoPath\" -t $durationSeconds " +
+            "-vf \"$vf\" -c:v mpeg4 -q:v 4 -an \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
             AppResult.Success(outputPath)
         } else {
             AppResult.Error("فشل تجهيز مقطع الفيديو الجاهز: ${session.failStackTrace ?: session.allLogsAsString}")
+        }
+    }
+
+    override suspend fun applyColorGrade(
+        videoPath: String,
+        colorGrade: String,
+        outputPath: String
+    ): AppResult<String> = withContext(Dispatchers.IO) {
+        val vf = colorGradeFilter(colorGrade)
+        val command = "-y -threads 0 -i \"$videoPath\" -vf \"$vf\" -c:v mpeg4 -q:v 4 -an \"$outputPath\""
+
+        val session = FFmpegKit.execute(command)
+        if (ReturnCode.isSuccess(session.returnCode)) {
+            AppResult.Success(outputPath)
+        } else {
+            AppResult.Error("فشل تطبيق تدريج الألوان: ${session.failStackTrace ?: session.allLogsAsString}")
         }
     }
 
@@ -252,8 +253,8 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
         }
 
         if (segments.size == 1) {
-            val singleCommand = "-y -i \"${segments[0].first}\" " +
-                "-c:v mpeg4 -q:v 3 -pix_fmt yuv420p -an \"$outputPath\""
+            val singleCommand = "-y -threads 0 -i \"${segments[0].first}\" " +
+                "-c:v mpeg4 -q:v 4 -pix_fmt yuv420p -an \"$outputPath\""
             val session = FFmpegKit.execute(singleCommand)
             return@withContext if (ReturnCode.isSuccess(session.returnCode)) {
                 AppResult.Success(outputPath)
@@ -262,7 +263,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
             }
         }
 
-        val inputsBuilder = StringBuilder("-y ")
+        val inputsBuilder = StringBuilder("-y -threads 0 ")
         segments.forEach { (path, _) ->
             inputsBuilder.append("-i \"$path\" ")
         }
@@ -284,7 +285,7 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
 
         val filterComplex = filterBuilder.toString().trimEnd(';')
         val command = "$inputsBuilder-filter_complex \"$filterComplex\" -map \"[$lastLabel]\" " +
-            "-c:v mpeg4 -q:v 3 -pix_fmt yuv420p \"$outputPath\""
+            "-c:v mpeg4 -q:v 4 -pix_fmt yuv420p \"$outputPath\""
 
         val session = FFmpegKit.execute(command)
         if (ReturnCode.isSuccess(session.returnCode)) {
@@ -297,27 +298,30 @@ class FfmpegVideoRepositoryImpl @Inject constructor() : VideoRepository {
     override suspend fun overlayCaptionImages(
         videoPath: String,
         captionOverlays: List<CaptionOverlay>,
+        colorGrade: String,
         outputPath: String
     ): AppResult<String> = withContext(Dispatchers.IO) {
+        val gradeFilter = colorGradeFilter(colorGrade)
+
         if (captionOverlays.isEmpty()) {
-            val copySession = FFmpegKit.execute(
-                "-y -i \"$videoPath\" -c:v mpeg4 -q:v 3 -pix_fmt yuv420p " +
-                    "-c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
-            )
-            return@withContext if (ReturnCode.isSuccess(copySession.returnCode)) {
+            val command = "-y -threads 0 -i \"$videoPath\" -vf \"$gradeFilter\" " +
+                "-c:v mpeg4 -q:v 3 -pix_fmt yuv420p " +
+                "-c:a aac -b:a 128k -movflags +faststart \"$outputPath\""
+            val session = FFmpegKit.execute(command)
+            return@withContext if (ReturnCode.isSuccess(session.returnCode)) {
                 AppResult.Success(outputPath)
             } else {
-                AppResult.Error("فشل معالجة الفيديو: ${copySession.allLogsAsString}")
+                AppResult.Error("فشل معالجة الفيديو: ${session.allLogsAsString}")
             }
         }
 
-        val inputsBuilder = StringBuilder("-y -i \"$videoPath\" ")
+        val inputsBuilder = StringBuilder("-y -threads 0 -i \"$videoPath\" ")
         captionOverlays.forEach { overlay ->
             inputsBuilder.append("-i \"${overlay.imagePath}\" ")
         }
 
-        val filterBuilder = StringBuilder()
-        var lastLabel = "0:v"
+        val filterBuilder = StringBuilder("[0:v]$gradeFilter[graded];")
+        var lastLabel = "graded"
         captionOverlays.forEachIndexed { index, overlay ->
             val inputIndex = index + 1
             val outputLabel = "v${index + 1}"

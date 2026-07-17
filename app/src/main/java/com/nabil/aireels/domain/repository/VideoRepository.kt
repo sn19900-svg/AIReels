@@ -21,6 +21,7 @@ interface VideoRepository {
     suspend fun overlayCaptionImages(
         videoPath: String,
         captionOverlays: List<CaptionOverlay>,
+        colorGrade: String,
         outputPath: String
     ): AppResult<String>
     suspend fun concatWithCrossfade(
